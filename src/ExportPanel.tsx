@@ -8,7 +8,6 @@ const MAX_PRICE_ROWS = 30000;
 
 function escapeCsv(value: unknown) {
   let text = String(value ?? '');
-  // Prevent spreadsheet formula injection when operational exports are opened in Excel-compatible software.
   if (typeof value === 'string' && /^[=+\-@]/.test(text)) text = `'${text}`;
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
@@ -24,22 +23,6 @@ function downloadCsv(filename: string, headers: string[], rows: Array<Record<str
   URL.revokeObjectURL(url);
 }
 
-async function fetchAllProducts() {
-  const rows: Array<{ id: string; sku: string; name: string; unit: string; status: string; created_at: string }> = [];
-  for (let from = 0; from < MAX_EXPORT_ROWS; from += PAGE_SIZE) {
-    const { data, error } = await supabase!
-      .from('products')
-      .select('id,sku,name,unit,status,created_at')
-      .order('name')
-      .range(from, Math.min(from + PAGE_SIZE - 1, MAX_EXPORT_ROWS - 1));
-    if (error) throw error;
-    rows.push(...(data ?? []));
-    if (!data || data.length < PAGE_SIZE) break;
-  }
-  if (rows.length >= MAX_EXPORT_ROWS) throw new Error(`تصدير أكثر من ${MAX_EXPORT_ROWS.toLocaleString('ar-YE')} منتج غير مدعوم في عملية واحدة.`);
-  return rows;
-}
-
 export default function ExportPanel({ role }: { role: UserRole }) {
   const canExport = role === 'owner' || role === 'admin' || role === 'sales' || role === 'warehouse';
   const [busy, setBusy] = useState(false);
@@ -47,6 +30,23 @@ export default function ExportPanel({ role }: { role: UserRole }) {
   const [message, setMessage] = useState<string | null>(null);
 
   if (!canExport || !supabase) return null;
+  const client = supabase;
+
+  async function fetchAllProducts() {
+    const rows: Array<{ id: string; sku: string; name: string; unit: string; status: string; created_at: string }> = [];
+    for (let from = 0; from < MAX_EXPORT_ROWS; from += PAGE_SIZE) {
+      const { data, error } = await client
+        .from('products')
+        .select('id,sku,name,unit,status,created_at')
+        .order('name')
+        .range(from, Math.min(from + PAGE_SIZE - 1, MAX_EXPORT_ROWS - 1));
+      if (error) throw error;
+      rows.push(...(data ?? []));
+      if (!data || data.length < PAGE_SIZE) break;
+    }
+    if (rows.length >= MAX_EXPORT_ROWS) throw new Error(`تصدير أكثر من ${MAX_EXPORT_ROWS.toLocaleString('ar-YE')} منتج غير مدعوم في عملية واحدة.`);
+    return rows;
+  }
 
   async function exportProducts() {
     setBusy(true); setError(null); setMessage(null);
@@ -54,7 +54,7 @@ export default function ExportPanel({ role }: { role: UserRole }) {
       const now = new Date().toISOString();
       const [products, priceResult] = await Promise.all([
         fetchAllProducts(),
-        supabase.from('product_prices')
+        client.from('product_prices')
           .select('product_id,amount,valid_from,valid_to,price_lists!inner(tier,currency)')
           .lte('valid_from', now)
           .or(`valid_to.is.null,valid_to.gte.${now}`)
@@ -63,7 +63,6 @@ export default function ExportPanel({ role }: { role: UserRole }) {
       ]);
       if (priceResult.error) throw priceResult.error;
       if ((priceResult.data?.length ?? 0) >= MAX_PRICE_ROWS) throw new Error(`بيانات الأسعار تتجاوز الحد الآمن وهو ${MAX_PRICE_ROWS.toLocaleString('ar-YE')} سجل.`);
-
       const priceByProduct = new Map<string, { retail?: number; wholesale?: number; distributor?: number; currency?: string }>();
       for (const row of priceResult.data ?? []) {
         const tier = (row.price_lists as { tier?: string; currency?: string } | null)?.tier;
