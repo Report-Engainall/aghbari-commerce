@@ -1,34 +1,19 @@
-# بوابة الأغبري للمواد الغذائية
+# Aghbari Commerce
 
-Operational B2B commerce platform for **بوابة الأغبري للمواد الغذائية**.
+بوابة الأغبري للتجارة والجملة — منصة تجارة جملة حديثة، سريعة، آمنة، وقابلة للتوسع.
 
-## Product boundary
+## Product direction
 
-**الأغبري is the operational system of record.** It owns operational commerce workflows and reliable canonical data: catalog, pricing, customers, suppliers, orders, inventory, branches/warehouses, imports/exports, auditability, and operational integration boundaries.
+الأغبري منصة تجارية موحدة تجمع تجربة الشراء، الكتالوج، الأسعار، المخزون، العملاء، الطلبات، الإدارة، التحليلات، والذكاء داخل منتج واحد مترابط.
 
-**Report-Advisor is the analytics and decision layer.** Analytics, BI, advanced reporting, forecasting, decision intelligence, analytical alerts, and recommendations belong there and must not be duplicated inside الأغبري.
+## Engineering principles
 
-## Engineering standard
+- مصدر حقيقة واحد للبيانات التجارية.
+- صلاحيات وأمان على مستوى الخادم، وليس الواجهة فقط.
+- التصميم قابل للتوسع والتكوين بدل الحلول الصلبة غير القابلة للتطوير.
+- لا تعتبر أي وظيفة مكتملة دون تحقق فعلي مناسب لمرحلتها.
+- مراجع التصميم الخارجية تستخدم كمرجع بصري فقط ولا تدخل في حزمة الإنتاج.
 
-This repository follows an Owner-Level / Evidence-First completion protocol:
+## Quality rule
 
-`READ → RESCAN → DISCOVER → CLASSIFY → DESIGN → IMPLEMENT → TEST → TEST THE TEST → BYPASS SEARCH → REPAIR → REGRESSION → VERIFY → EXACT-HEAD CHECK → EVIDENCE → UPDATE INDEX → REPEAT`
-
-No feature is considered production-ready merely because it exists in code. Completion progresses through:
-
-`BUILT → INTEGRATED → VERIFIED → RUNTIME PROVEN → PRODUCTION CERTIFIED`
-
-The architecture is a living artifact: when evidence exposes a better boundary, security weakness, unnecessary duplication, or reliability risk, the architecture and protocol are revised before implementation continues.
-
-## Current phase
-
-**PHASE 1 — Executable operational implementation + reliability hardening.**
-
-The repository now contains the executable Arabic RTL commerce application, operational domain services, Supabase migrations/RPCs, PWA/offline primitives, import pipeline, catalog export, order/cart hardening, purchasing/receiving, audit/outbox foundations, and security hardening. The remaining work is evidence-driven runtime, integration, deployment, and release certification; no production certification is claimed yet.
-
-## Source-of-truth documents
-
-- `docs/MASTER-EXECUTION-INDEX.md` — canonical progress ledger
-- `docs/OWNER-LEVEL-PROTOCOL.md` — execution, evidence, and certification protocol
-- `docs/ARCHITECTURE-BOUNDARIES.md` — operational/analytical and integration boundaries
-- `docs/RELEASE-GATES-V1.md` — release gates and final certification rule
+No feature is considered production-complete until implementation, integration, verification, and real runtime behavior are proven.
