@@ -7,6 +7,7 @@ import './accessibility.css';
 import './product-excellence.css';
 import './aghbari-premium.css';
 import './aghbari-operations.css';
+import './aghbari-command-center.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode><AppErrorBoundary><App /></AppErrorBoundary></StrictMode>
