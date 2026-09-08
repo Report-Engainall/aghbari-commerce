@@ -7,7 +7,7 @@ import './accessibility.css';
 import './product-excellence.css';
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode><AppErrorBoundary><App /></StrictMode>
+  <StrictMode><AppErrorBoundary><App /></AppErrorBoundary></StrictMode>
 );
 
 if ('serviceWorker' in navigator) {
