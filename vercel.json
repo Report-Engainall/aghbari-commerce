@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build",
-  "installCommand": "npm ci --no-audit --no-fund",
+  "installCommand": "npm install --no-audit --no-fund",
   "outputDirectory": "dist",
   "headers": [
     {
