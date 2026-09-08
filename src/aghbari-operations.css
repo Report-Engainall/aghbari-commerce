@@ -1,0 +1,20 @@
+/* Aghbari Operations UX — high-density, role-aware back-office presentation. */
+:root { --agh-ops-surface:#fff; --agh-ops-surface-alt:#f8fbf9; --agh-ops-border:#dfe8e3; --agh-ops-muted:#718079; --agh-ops-accent:#087f5b; --agh-ops-accent-dark:#075c43; --agh-ops-gold:#c88a18; --agh-ops-shadow:0 12px 34px rgba(16,35,29,.065); }
+.admin-panel { background:linear-gradient(180deg,#fff 0%,#fbfdfc 100%); }
+.admin-panel > .section-heading { position:relative; padding-bottom:20px; border-bottom:1px solid var(--agh-ops-border); }
+.admin-panel > .section-heading::after { content:"تشغيل • مخزون • أسعار • طلبات • عملاء • مالية"; display:block; margin-top:8px; color:var(--agh-ops-muted); font-size:11px; font-weight:700; }
+.admin-grid { align-items:stretch; gap:18px; }
+.admin-card { position:relative; overflow:hidden; background:var(--agh-ops-surface); border-color:var(--agh-ops-border); border-radius:20px; padding:21px; box-shadow:0 3px 14px rgba(16,35,29,.035); }
+.admin-card::before { content:""; position:absolute; inset:0 0 auto; height:2px; background:linear-gradient(90deg,var(--agh-ops-accent-dark),var(--agh-ops-accent),var(--agh-ops-gold)); opacity:.65; }
+.admin-card h3 { margin-top:2px; font-size:18px; line-height:1.35; }
+.admin-card input,.admin-card select,.admin-card textarea { background:#fcfefd; border-color:#d7e2dc; min-height:45px; }
+.admin-card button { min-height:45px; }
+.admin-panel .cart-panel { margin:26px 0 0; background:#fff; border-color:var(--agh-ops-border); box-shadow:var(--agh-ops-shadow); }
+.admin-panel .cart-panel .section-heading { padding-bottom:15px; border-bottom:1px solid var(--agh-ops-border); }
+.admin-panel .cart-line { grid-template-columns:minmax(0,1fr) minmax(145px,auto) minmax(210px,auto); padding:16px 8px; border-radius:12px; }
+.admin-panel .cart-line:hover { background:var(--agh-ops-surface-alt); }
+.admin-panel .status-actions button { min-height:38px; border-radius:10px; padding-inline:11px; }
+.admin-panel > .cart-panel,.admin-panel > section,.admin-panel > article { scroll-margin-top:96px; }
+@media (min-width:1200px) { .admin-grid{grid-template-columns:repeat(3,minmax(0,1fr));} .admin-panel{padding:34px;} .admin-card{padding:24px;} }
+@media (max-width:900px) { .admin-grid{grid-template-columns:repeat(2,minmax(0,1fr));} .admin-panel .cart-line{grid-template-columns:1fr auto;} .admin-panel .status-actions{grid-column:1/-1;justify-content:flex-start;min-width:0;} }
+@media (max-width:620px) { .admin-grid{grid-template-columns:1fr;} .admin-panel>.section-heading{align-items:flex-start;flex-direction:column;} .admin-panel .cart-line{grid-template-columns:1fr;} .admin-panel .status-actions{grid-column:auto;} }
