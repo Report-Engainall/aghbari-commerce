@@ -8,14 +8,14 @@ export interface CategoryOption {
 }
 
 export async function getCategories(): Promise<CategoryOption[]> {
-  const { data, error } = await retryRead(() => requireSupabase()
-    .from('categories')
-    .select('id, name, parent_id')
-    .eq('is_active', true)
-    .order('name')
-    .then((result) => {
-      if (result.error) throw result.error;
-      return result;
-    }));
+  const { data, error } = await retryRead(async () => {
+    const result = await requireSupabase()
+      .from('categories')
+      .select('id, name, parent_id')
+      .eq('is_active', true)
+      .order('name');
+    if (result.error) throw result.error;
+    return result;
+  });
   return (data ?? []) as CategoryOption[];
 }
