@@ -14,6 +14,8 @@
     "test:e2e": "playwright test",
     "test:release-audit": "node scripts/release-audit.mjs",
     "test:product-integrity": "node scripts/product-integrity-audit.mjs",
+    "test:architecture": "node scripts/architecture-audit.mjs",
+    "test:release-gate": "npm run test:product-integrity && npm run test:architecture && npm run typecheck && npm run lint && npm test -- --run && npm run build && npm run test:release-audit",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -33,8 +35,6 @@
     "eslint-plugin-react-hooks": "6.1.1",
     "eslint-plugin-react-refresh": "0.4.20",
     "typescript": "5.9.2",
-    "typescript-eslint": "8.43.0",
-    "vite": "7.3.5",
     "vitest": "3.2.4"
   }
 }
