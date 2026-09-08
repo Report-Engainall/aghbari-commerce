@@ -3,9 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": {
-    "node": ">=22 <23"
-  },
+  "engines": { "node": ">=22 <23" },
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc -b",
@@ -15,6 +13,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:release-audit": "node scripts/release-audit.mjs",
+    "test:product-integrity": "node scripts/product-integrity-audit.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
