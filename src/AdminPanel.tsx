@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CustomerTier, OrderStatus } from './domain/types';
 import { formatMoney } from './domain/pricing';
 import { adjustInventory, createCategory, setProductPrice, upsertProduct } from './services/admin';
@@ -108,9 +108,38 @@ export default function AdminPanel({ role }: { role: UserRole }) {
   const canOrderWorkflow = STAFF_ROLES.has(role);
   const canFinance = ['owner', 'admin', 'sales'].includes(role);
 
+  const operational = useMemo(() => {
+    const pending = orders.filter((order) => order.status === 'pending').length;
+    const preparing = orders.filter((order) => order.status === 'preparing' || order.status === 'confirmed').length;
+    const ready = orders.filter((order) => order.status === 'ready').length;
+    const completed = orders.filter((order) => order.status === 'completed').length;
+    const cancelled = orders.filter((order) => order.status === 'cancelled').length;
+    const value = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    return { pending, preparing, ready, completed, cancelled, value };
+  }, [orders]);
+
+  const sections = useMemo(() => [
+    canCatalog && ['catalog-admin', 'المنتجات والأسعار'],
+    canInventory && ['inventory-admin', 'المخزون والتوريد'],
+    canOrderWorkflow && ['orders-admin', 'الطلبات'],
+    canFinance && ['finance-admin', 'المالية'],
+    canCatalog && ['customers-admin', 'العملاء'],
+  ].filter(Boolean) as [string, string][], [canCatalog, canInventory, canOrderWorkflow, canFinance]);
+
   return <section className="admin-panel" id="account">
     <div className="section-heading"><div><span className="eyebrow">إدارة التشغيل</span><h2>مركز التحكم</h2></div><span>الصلاحيات تُفرض على الخادم أيضًا</span></div>
-    <div className="admin-grid">
+
+    <div className="command-overview" aria-label="ملخص التشغيل">
+      <article className="command-stat command-stat-primary"><span>الطلبات قيد المراجعة</span><strong>{operational.pending}</strong><small>{operational.pending ? 'تحتاج إجراءً الآن' : 'لا توجد طلبات معلقة'}</small></article>
+      <article className="command-stat"><span>قيد التجهيز</span><strong>{operational.preparing}</strong><small>مؤكد أو قيد التجهيز</small></article>
+      <article className="command-stat"><span>جاهز للتسليم</span><strong>{operational.ready}</strong><small>بانتظار الإكمال</small></article>
+      <article className="command-stat"><span>مكتمل</span><strong>{operational.completed}</strong><small>من الطلبات الظاهرة</small></article>
+      <article className="command-stat"><span>قيمة الطلبات</span><strong>{formatMoney(operational.value)}</strong><small>{operational.cancelled} ملغي</small></article>
+    </div>
+
+    {sections.length > 0 && <nav className="command-nav" aria-label="أقسام مركز التحكم">{sections.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}</nav>}
+
+    <div className="admin-grid" id="catalog-admin">
       {canCatalog && <form className="admin-card" onSubmit={(e) => { e.preventDefault(); void run(() => upsertProduct({ sku: product.sku, name: product.name, unit: product.unit, categoryId: product.categoryId || null, description: product.description || null }), 'تم حفظ المنتج.'); }}>
         <h3>منتج جديد</h3><input aria-label="SKU" placeholder="SKU" value={product.sku} onChange={(e) => setProduct({ ...product, sku: e.target.value })} required />
         <input aria-label="اسم المنتج" placeholder="اسم المنتج" value={product.name} onChange={(e) => setProduct({ ...product, name: e.target.value })} required />
@@ -138,18 +167,23 @@ export default function AdminPanel({ role }: { role: UserRole }) {
         <h3>استيراد Excel آمن</h3><input aria-label="ملف المنتجات" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(e) => { setImportFile(e.target.files?.[0] ?? null); setImportJobId(null); setImportPreview(null); }} required />
         {importPreview && <small>الصفوف: {importPreview.rows} · الأخطاء: {importPreview.invalid}</small>}{!importJobId ? <button disabled={busy || !importFile}>رفع ومعاينة</button> : <button disabled={busy || !warehouseId} onClick={(e) => { e.preventDefault(); void commitImport(); }}>اعتماد الاستيراد الذري</button>}
       </form>}
-      {canInventory && <form className="admin-card" onSubmit={(e) => { e.preventDefault(); if (!selectedProduct || !warehouseId || !delta) return; void run(() => adjustInventory(warehouseId, selectedProduct, Number(delta), reason.trim()), 'تم تعديل المخزون وتسجيل الحركة.'); }}>
-        <h3>تعديل المخزون</h3><select aria-label="المستودع" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} required><option value="">اختر المستودع</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
-        <select aria-label="المنتج" value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} required><option value="">اختر منتجًا</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-        <input aria-label="التغيير" type="number" step="1" placeholder="+ أو - الكمية" value={delta} onChange={(e) => setDelta(e.target.value)} required /><input aria-label="سبب التعديل" placeholder="سبب التعديل" value={reason} onChange={(e) => setReason(e.target.value)} required /><button disabled={busy}>تسجيل الحركة</button>
-      </form>}
     </div>
-    {canOrderWorkflow && <div className="cart-panel"><div className="section-heading"><div><span className="eyebrow">التشغيل</span><h2>إدارة الطلبات</h2></div><span>{orders.length} طلبات</span></div>{ordersLoading ? <div className="cart-empty">جارٍ تحميل الطلبات…</div> : !orders.length ? <div className="cart-empty">لا توجد طلبات تشغيلية بعد.</div> : <div className="cart-lines">{orders.map((order) => <article className="cart-line" key={order.id}><div><strong>طلب #{order.order_number}</strong><small>العميل: {order.customer_name}</small></div><div><strong>{formatMoney(order.total)} {order.currency}</strong><small>الحالة: {STATUS_LABELS[order.status]}</small></div><div className="status-actions">{allowedNextStatuses(order.status, role).map((next) => <button key={next} disabled={busy} onClick={() => void changeOrderStatus(order.id, next)} aria-label={`تحويل الطلب ${order.order_number} إلى ${STATUS_LABELS[next]}`}>{STATUS_LABELS[next]}</button>)}</div></article>)}</div>}</div>}
+
+    <div id="orders-admin">
+      {canOrderWorkflow && <div className="cart-panel"><div className="section-heading"><div><span className="eyebrow">التشغيل</span><h2>إدارة الطلبات</h2></div><span>{orders.length} طلبات</span></div>{ordersLoading ? <div className="cart-empty">جارٍ تحميل الطلبات…</div> : !orders.length ? <div className="cart-empty">لا توجد طلبات تشغيلية بعد.</div> : <div className="cart-lines">{orders.map((order) => <article className="cart-line" key={order.id}><div><strong>طلب #{order.order_number}</strong><small>العميل: {order.customer_name}</small></div><div><strong>{formatMoney(order.total)} {order.currency}</strong><small>الحالة: {STATUS_LABELS[order.status]}</small></div><div className="status-actions">{allowedNextStatuses(order.status, role).map((next) => <button key={next} disabled={busy} onClick={() => void changeOrderStatus(order.id, next)} aria-label={`تحويل الطلب ${order.order_number} إلى ${STATUS_LABELS[next]}`}>{STATUS_LABELS[next]}</button>)}</div></article>)}</div>}</div>}
+    </div>
+
     {error && <div className="error-banner" role="alert">{error}</div>}{message && <div className="success" role="status">{message}</div>}
-    {canCatalog && <CustomerPanel role={role} />}
-    {canInventory && <InventoryPanel role={role} />}
-    {canInventory && <PurchasingPanel role={role} />}
-    {canFinance && <FinancePanel role={role} />}
+    <div id="inventory-admin">{canInventory && <InventoryPanel role={role} />}</div>
+    <div>{canInventory && <PurchasingPanel role={role} />}</div>
+    <div id="finance-admin">{canFinance && <FinancePanel role={role} />}</div>
+    <div id="customers-admin">{canCatalog && <CustomerPanel role={role} />}</div>
     {canInventory && <ExportPanel role={role} />}
+
+    {canInventory && <form className="admin-card" style={{ marginTop: 18 }} onSubmit={(e) => { e.preventDefault(); if (!selectedProduct || !warehouseId || !delta) return; void run(() => adjustInventory(warehouseId, selectedProduct, Number(delta), reason.trim()), 'تم تعديل المخزون وتسجيل الحركة.'); }}>
+      <h3>تسوية مخزون سريعة</h3><select aria-label="المستودع" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} required><option value="">اختر المستودع</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
+      <select aria-label="المنتج" value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} required><option value="">اختر المنتج</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+      <input aria-label="التغيير" type="number" step="1" placeholder="+ أو - الكمية" value={delta} onChange={(e) => setDelta(e.target.value)} required /><input aria-label="سبب التعديل" placeholder="سبب التعديل" value={reason} onChange={(e) => setReason(e.target.value)} required /><button disabled={busy}>تسجيل الحركة</button>
+    </form>}
   </section>;
 }
