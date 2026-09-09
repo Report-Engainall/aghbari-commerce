@@ -2,10 +2,7 @@ import { requireSupabase } from '../lib/supabase';
 import type { OrderStatus } from '../domain/types';
 import { retryRead } from '../lib/retry';
 
-export interface CustomerOrderSummary {
-  id: string; order_number: number; status: OrderStatus; total: number; currency: string; created_at: string;
-}
-
+export interface CustomerOrderSummary { id: string; order_number: number; status: OrderStatus; total: number; currency: string; created_at: string; }
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ORDER_STATUSES: ReadonlySet<string> = new Set(['draft', 'pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled']);
 
@@ -23,12 +20,8 @@ export function assertCustomerOrderSummary(value: unknown): CustomerOrderSummary
 
 export async function getCustomerOrders(limit = 20): Promise<CustomerOrderSummary[]> {
   const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 50);
-  const { data, error } = await retryRead(async () => {
-    const result = await requireSupabase()
-      .from('orders')
-      .select('id,order_number,status,total,currency,created_at')
-      .order('created_at', { ascending: false })
-      .limit(safeLimit);
+  const { data } = await retryRead(async () => {
+    const result = await requireSupabase().from('orders').select('id,order_number,status,total,currency,created_at').order('created_at', { ascending: false }).limit(safeLimit);
     if (result.error) throw result.error;
     return result;
   });
