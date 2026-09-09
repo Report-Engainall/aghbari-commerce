@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 20
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
     steps:
       - name: Checkout
@@ -51,5 +51,5 @@ jobs:
         run: npm run test:release-audit
 
       - name: E2E suite (when runtime credentials and base URL are available)
-        if: ${{ env.VITE_SUPABASE_URL != '' && env.VITE_SUPABASE_ANON_KEY != '' && env.E2E_BASE_URL != '' }}
+        if: ${{ env.VITE_SUPABASE_URL != '' && env.VITE_SUPABASE_PUBLISHABLE_KEY != '' && env.E2E_BASE_URL != '' }}
         run: npm run test:e2e
