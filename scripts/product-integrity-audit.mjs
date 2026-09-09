@@ -7,14 +7,24 @@ const required = [
   'src/services/orders.ts', 'src/services/catalog.ts', 'src/services/cart.ts', 'src/services/staffOrders.ts',
   'src/domain/order.ts', 'src/domain/pricing.ts', 'src/domain/import.ts', 'src/domain/businessIntelligence.ts', 'src/AppErrorBoundary.tsx'
 ];
-const requiredMigrations = [
-  '0033_onyx_isolated_analytics_sandbox.sql', '0034_onyx_tenant_cross_key_hardening.sql',
-  '0035_onyx_fk_indexes.sql', '0036_notification_rls_and_fk_indexes.sql'
+
+// Migration filenames are versioned artifacts, not semantic feature IDs. The
+// original 003x names were deduplicated/re-sequenced; validate the current
+// canonical versions that are also recorded in Supabase migration history.
+const requiredMigrationPatterns = [
+  /^20260909005534_.*\.sql$/,
+  /^20260909005546_.*\.sql$/,
+  /^20260909005715_.*\.sql$/,
+  /^20260909005745_.*\.sql$/,
+  /^20260909005901_.*\.sql$/,
+  /^20260909010000_.*\.sql$/,
 ];
 
+const migrationDir = path.join(root, 'supabase', 'migrations');
+const migrationNames = fs.existsSync(migrationDir) ? fs.readdirSync(migrationDir) : [];
 const failures = [];
 for (const file of required) if (!fs.existsSync(path.join(root, file))) failures.push(`Missing required file: ${file}`);
-for (const file of requiredMigrations) if (!fs.existsSync(path.join(root, 'supabase', 'migrations', file))) failures.push(`Missing required migration: ${file}`);
+for (const pattern of requiredMigrationPatterns) if (!migrationNames.some((name) => pattern.test(name))) failures.push(`Missing required canonical migration: ${pattern}`);
 
 const sourceFiles = [];
 function walk(dir) {
@@ -58,4 +68,4 @@ if (failures.length) {
   process.exit(1);
 }
 console.log('PRODUCT INTEGRITY AUDIT: PASS');
-console.log(`Checked ${required.length} required files, ${requiredMigrations.length} critical migrations, ${sourceFiles.length} source files, and the environment contract.`);
+console.log(`Checked ${required.length} required files, ${requiredMigrationPatterns.length} canonical migrations, ${sourceFiles.length} source files, and the environment contract.`);
