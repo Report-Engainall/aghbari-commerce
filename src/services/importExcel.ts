@@ -10,6 +10,8 @@ const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 const ZIP_SIGNATURES = ['504b0304', '504b0506', '504b0708'];
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_SERVER_CHUNK_ROWS = 5000;
+const MAX_CHUNK_ATTEMPTS = 3;
+const CHUNK_RETRY_BASE_MS = 250;
 
 export interface CommittedImportResult { imported_rows: number; products_created: number; products_updated: number; inventory_changed: number; }
 
@@ -35,6 +37,30 @@ async function assertXlsxContainer(file: File): Promise<void> {
   const header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
   const signature = Array.from(header, (byte) => byte.toString(16).padStart(2, '0')).join('');
   if (!ZIP_SIGNATURES.includes(signature)) throw new Error('الملف لا يبدو كحاوية XLSX صالحة.');
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function stageChunkWithRetry(importJobId: string, startRow: number, rows: ImportRow[]): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_CHUNK_ATTEMPTS; attempt += 1) {
+    try {
+      const { data, error } = await requireSupabase().rpc('stage_product_import_chunk', {
+        p_import_job_id: importJobId,
+        p_start_row: startRow,
+        p_rows: rows,
+      });
+      if (error) throw error;
+      assertChunkCount(data, rows.length);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_CHUNK_ATTEMPTS) await delay(CHUNK_RETRY_BASE_MS * 2 ** (attempt - 1));
+    }
+  }
+  throw lastError instanceof Error ? new Error(`فشل استلام دفعة الاستيراد بعد ${MAX_CHUNK_ATTEMPTS} محاولات: ${lastError.message}`) : new Error(`فشل استلام دفعة الاستيراد بعد ${MAX_CHUNK_ATTEMPTS} محاولات.`);
 }
 
 export async function parseProductWorkbook(file: File) {
@@ -70,8 +96,10 @@ export async function parseProductWorkbook(file: File) {
 
 /**
  * Resumable unified pipeline: begin once, send bounded chunks, then finalize.
- * The server owns row numbering and rejects conflicting retries, so a dropped request
- * can be retried without silently replacing a previously staged row.
+ * The server returns an existing incomplete job for the same file fingerprint,
+ * making a second attempt resume the same staged job instead of creating a new one.
+ * Chunk retries are safe because the server rejects conflicting row payloads and
+ * treats an identical row retry as idempotent.
  */
 export async function stageProductImport(file: File) {
   const parsed = await parseProductWorkbook(file);
@@ -90,13 +118,7 @@ export async function stageProductImport(file: File) {
   const chunkSize = parsed.rows.length > 20_000 ? 1000 : parsed.rows.length > 5_000 ? 2000 : MAX_SERVER_CHUNK_ROWS;
   for (let offset = 0; offset < parsed.rows.length; offset += chunkSize) {
     const chunk = parsed.rows.slice(offset, offset + chunkSize);
-    const { data, error } = await supabase.rpc('stage_product_import_chunk', {
-      p_import_job_id: jobId,
-      p_start_row: offset + 1,
-      p_rows: chunk,
-    });
-    if (error) throw error;
-    assertChunkCount(data, chunk.length);
+    await stageChunkWithRetry(jobId, offset + 1, chunk);
   }
 
   const { data: finalized, error: finalizeError } = await supabase.rpc('finalize_product_import', { p_import_job_id: jobId });
