@@ -13,6 +13,10 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,9 +51,6 @@ jobs:
       - name: Release audit
         run: npm run test:release-audit
 
-      - name: E2E suite (when runtime credentials are available)
-        if: ${{ secrets.VITE_SUPABASE_URL != '' && secrets.VITE_SUPABASE_ANON_KEY != '' }}
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      - name: E2E suite (when runtime credentials and base URL are available)
+        if: ${{ env.VITE_SUPABASE_URL != '' && env.VITE_SUPABASE_ANON_KEY != '' && env.E2E_BASE_URL != '' }}
         run: npm run test:e2e
