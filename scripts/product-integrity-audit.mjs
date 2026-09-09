@@ -4,12 +4,17 @@ import path from 'node:path';
 const root = process.cwd();
 const required = [
   'src/App.tsx', 'src/AdminPanel.tsx', 'src/lib/supabase.ts', 'src/services/auth.ts',
-  'src/services/orders.ts', 'src/services/catalog.ts', 'src/services/cart.ts',
-  'src/services/staffOrders.ts', 'src/domain/order.ts', 'src/domain/pricing.ts', 'src/AppErrorBoundary.tsx'
+  'src/services/orders.ts', 'src/services/catalog.ts', 'src/services/cart.ts', 'src/services/staffOrders.ts',
+  'src/domain/order.ts', 'src/domain/pricing.ts', 'src/domain/import.ts', 'src/domain/businessIntelligence.ts', 'src/AppErrorBoundary.tsx'
+];
+const requiredMigrations = [
+  '0033_onyx_isolated_analytics_sandbox.sql', '0034_onyx_tenant_cross_key_hardening.sql',
+  '0035_onyx_fk_indexes.sql', '0036_notification_rls_and_fk_indexes.sql'
 ];
 
 const failures = [];
 for (const file of required) if (!fs.existsSync(path.join(root, file))) failures.push(`Missing required file: ${file}`);
+for (const file of requiredMigrations) if (!fs.existsSync(path.join(root, 'supabase', 'migrations', file))) failures.push(`Missing required migration: ${file}`);
 
 const sourceFiles = [];
 function walk(dir) {
@@ -35,9 +40,8 @@ if (forbiddenMatches.length) failures.push(`Legacy branding found in source: ${f
 if (debugMatches.length) failures.push(`Debug console calls found in source: ${debugMatches.join(', ')}`);
 
 const envExamplePath = path.join(root, '.env.example');
-if (!fs.existsSync(envExamplePath)) {
-  failures.push('Missing environment contract: .env.example');
-} else {
+if (!fs.existsSync(envExamplePath)) failures.push('Missing environment contract: .env.example');
+else {
   const envExample = fs.readFileSync(envExamplePath, 'utf8');
   if (!/^VITE_SUPABASE_URL=/m.test(envExample)) failures.push('Missing environment contract: VITE_SUPABASE_URL');
   if (!/^VITE_SUPABASE_PUBLISHABLE_KEY=/m.test(envExample)) failures.push('Missing environment contract: VITE_SUPABASE_PUBLISHABLE_KEY');
@@ -54,4 +58,4 @@ if (failures.length) {
   process.exit(1);
 }
 console.log('PRODUCT INTEGRITY AUDIT: PASS');
-console.log(`Checked ${required.length} required files, ${sourceFiles.length} source files, and the environment contract.`);
+console.log(`Checked ${required.length} required files, ${requiredMigrations.length} critical migrations, ${sourceFiles.length} source files, and the environment contract.`);
