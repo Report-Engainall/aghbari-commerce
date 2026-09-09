@@ -12,6 +12,7 @@ import ExportPanel from './ExportPanel';
 import CustomerPanel from './CustomerPanel';
 import InventoryPanel from './InventoryPanel';
 import FinancePanel from './FinancePanel';
+import ReconciliationPanel from './ReconciliationPanel';
 
 interface StaffProduct { id: string; sku: string; name: string; unit: string; }
 interface Warehouse { id: string; name: string; }
@@ -128,7 +129,6 @@ export default function AdminPanel({ role }: { role: UserRole }) {
 
   return <section className="admin-panel" id="account">
     <div className="section-heading"><div><span className="eyebrow">إدارة التشغيل</span><h2>مركز التحكم</h2></div><span>الصلاحيات تُفرض على الخادم أيضًا</span></div>
-
     <div className="command-overview" aria-label="ملخص التشغيل">
       <article className="command-stat command-stat-primary"><span>الطلبات قيد المراجعة</span><strong>{operational.pending}</strong><small>{operational.pending ? 'تحتاج إجراءً الآن' : 'لا توجد طلبات معلقة'}</small></article>
       <article className="command-stat"><span>قيد التجهيز</span><strong>{operational.preparing}</strong><small>مؤكد أو قيد التجهيز</small></article>
@@ -136,9 +136,7 @@ export default function AdminPanel({ role }: { role: UserRole }) {
       <article className="command-stat"><span>مكتمل</span><strong>{operational.completed}</strong><small>من الطلبات الظاهرة</small></article>
       <article className="command-stat"><span>قيمة الطلبات</span><strong>{formatMoney(operational.value)}</strong><small>{operational.cancelled} ملغي</small></article>
     </div>
-
     {sections.length > 0 && <nav className="command-nav" aria-label="أقسام مركز التحكم">{sections.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}</nav>}
-
     <div className="admin-grid" id="catalog-admin">
       {canCatalog && <form className="admin-card" onSubmit={(e) => { e.preventDefault(); void run(() => upsertProduct({ sku: product.sku, name: product.name, unit: product.unit, categoryId: product.categoryId || null, description: product.description || null }), 'تم حفظ المنتج.'); }}>
         <h3>منتج جديد</h3><input aria-label="SKU" placeholder="SKU" value={product.sku} onChange={(e) => setProduct({ ...product, sku: e.target.value })} required />
@@ -168,18 +166,16 @@ export default function AdminPanel({ role }: { role: UserRole }) {
         {importPreview && <small>الصفوف: {importPreview.rows} · الأخطاء: {importPreview.invalid}</small>}{!importJobId ? <button disabled={busy || !importFile}>رفع ومعاينة</button> : <button disabled={busy || !warehouseId} onClick={(e) => { e.preventDefault(); void commitImport(); }}>اعتماد الاستيراد الذري</button>}
       </form>}
     </div>
-
     <div id="orders-admin">
       {canOrderWorkflow && <div className="cart-panel"><div className="section-heading"><div><span className="eyebrow">التشغيل</span><h2>إدارة الطلبات</h2></div><span>{orders.length} طلبات</span></div>{ordersLoading ? <div className="cart-empty">جارٍ تحميل الطلبات…</div> : !orders.length ? <div className="cart-empty">لا توجد طلبات تشغيلية بعد.</div> : <div className="cart-lines">{orders.map((order) => <article className="cart-line" key={order.id}><div><strong>طلب #{order.order_number}</strong><small>العميل: {order.customer_name}</small></div><div><strong>{formatMoney(order.total)} {order.currency}</strong><small>الحالة: {STATUS_LABELS[order.status]}</small></div><div className="status-actions">{allowedNextStatuses(order.status, role).map((next) => <button key={next} disabled={busy} onClick={() => void changeOrderStatus(order.id, next)} aria-label={`تحويل الطلب ${order.order_number} إلى ${STATUS_LABELS[next]}`}>{STATUS_LABELS[next]}</button>)}</div></article>)}</div>}</div>}
     </div>
-
     {error && <div className="error-banner" role="alert">{error}</div>}{message && <div className="success" role="status">{message}</div>}
     <div id="inventory-admin">{canInventory && <InventoryPanel role={role} />}</div>
     <div>{canInventory && <PurchasingPanel role={role} />}</div>
     <div id="finance-admin">{canFinance && <FinancePanel role={role} />}</div>
     <div id="customers-admin">{canCatalog && <CustomerPanel role={role} />}</div>
+    {canInventory && <ReconciliationPanel role={role} />}
     {canInventory && <ExportPanel role={role} />}
-
     {canInventory && <form className="admin-card" style={{ marginTop: 18 }} onSubmit={(e) => { e.preventDefault(); if (!selectedProduct || !warehouseId || !delta) return; void run(() => adjustInventory(warehouseId, selectedProduct, Number(delta), reason.trim()), 'تم تعديل المخزون وتسجيل الحركة.'); }}>
       <h3>تسوية مخزون سريعة</h3><select aria-label="المستودع" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} required><option value="">اختر المستودع</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
       <select aria-label="المنتج" value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} required><option value="">اختر المنتج</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
