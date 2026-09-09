@@ -107,4 +107,4 @@ BEGIN
   RETURN v_id;
 END; $$;
 REVOKE ALL ON FUNCTION public.create_intelligence_evidence(text,uuid,text,text,jsonb,text,jsonb,jsonb,numeric,timestamptz,timestamptz) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.create_intelligence_evidence(text,uuid,text,text,jsonb,text,jsonb,numeric,timestamptz,timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.create_intelligence_evidence(text,uuid,text,text,jsonb,text,jsonb,jsonb,numeric,timestamptz,timestamptz) TO authenticated;
