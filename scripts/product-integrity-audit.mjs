@@ -34,9 +34,13 @@ for (const file of sourceFiles) {
 if (forbiddenMatches.length) failures.push(`Legacy branding found in source: ${forbiddenMatches.join(', ')}`);
 if (debugMatches.length) failures.push(`Debug console calls found in source: ${debugMatches.join(', ')}`);
 
-const envExample = fs.readFileSync(path.join(root, '.env.example'), 'utf8');
-for (const key of ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY']) {
-  if (!new RegExp(`^${key}=`, 'm').test(envExample)) failures.push(`Missing environment contract: ${key}`);
+const envExamplePath = path.join(root, '.env.example');
+if (!fs.existsSync(envExamplePath)) {
+  failures.push('Missing environment contract: .env.example');
+} else {
+  const envExample = fs.readFileSync(envExamplePath, 'utf8');
+  if (!/^VITE_SUPABASE_URL=/m.test(envExample)) failures.push('Missing environment contract: VITE_SUPABASE_URL');
+  if (!/^VITE_SUPABASE_PUBLISHABLE_KEY=/m.test(envExample)) failures.push('Missing environment contract: VITE_SUPABASE_PUBLISHABLE_KEY');
 }
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
