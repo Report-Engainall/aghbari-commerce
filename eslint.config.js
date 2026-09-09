@@ -17,14 +17,14 @@ export default tseslint.config(
   },
   {
     files: ['**/*.mjs'],
-    languageOptions: {
-      globals: { console: 'readonly', process: 'readonly' }
-    }
+    languageOptions: { globals: { console: 'readonly', process: 'readonly' } }
+  },
+  {
+    files: ['scripts/release-audit.mjs'],
+    rules: { 'no-useless-escape': 'off' }
   },
   {
     files: ['public/sw.js'],
-    languageOptions: {
-      globals: { caches: 'readonly', fetch: 'readonly', self: 'readonly', URL: 'readonly' }
-    }
+    languageOptions: { globals: { caches: 'readonly', fetch: 'readonly', self: 'readonly', URL: 'readonly' } }
   }
 );
