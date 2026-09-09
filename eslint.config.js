@@ -18,18 +18,13 @@ export default tseslint.config(
   {
     files: ['**/*.mjs'],
     languageOptions: {
-      globals: { console: 'readonly' }
+      globals: { console: 'readonly', process: 'readonly' }
     }
   },
   {
     files: ['public/sw.js'],
     languageOptions: {
-      globals: {
-        caches: 'readonly',
-        fetch: 'readonly',
-        self: 'readonly',
-        URL: 'readonly'
-      }
+      globals: { caches: 'readonly', fetch: 'readonly', self: 'readonly', URL: 'readonly' }
     }
   }
 );
