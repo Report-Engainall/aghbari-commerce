@@ -9,6 +9,7 @@ const MAX_SOURCE_NAME_LENGTH = 180;
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const ZIP_SIGNATURES = ['504b0304', '504b0506', '504b0708'];
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_SERVER_CHUNK_ROWS = 5000;
 
 export interface CommittedImportResult { imported_rows: number; products_created: number; products_updated: number; inventory_changed: number; }
 
@@ -23,6 +24,11 @@ function assertCommittedImportResult(value: unknown): CommittedImportResult {
   const fields: Array<keyof CommittedImportResult> = ['imported_rows', 'products_created', 'products_updated', 'inventory_changed'];
   for (const field of fields) if (!Number.isSafeInteger(candidate[field]) || (candidate[field] as number) < 0) throw new Error('استجابة اعتماد الاستيراد ناقصة أو غير صالحة. لم يتم إثبات اعتماد الاستيراد.');
   return { imported_rows: candidate.imported_rows!, products_created: candidate.products_created!, products_updated: candidate.products_updated!, inventory_changed: candidate.inventory_changed! };
+}
+
+function assertChunkCount(value: unknown, expected: number): number {
+  if (!Number.isSafeInteger(value) || value !== expected) throw new Error('لم يتم تأكيد استلام دفعة الاستيراد بالكامل. أعد المحاولة قبل الاعتماد.');
+  return value;
 }
 
 async function assertXlsxContainer(file: File): Promise<void> {
@@ -62,13 +68,41 @@ export async function parseProductWorkbook(file: File) {
   return { rows: parsed, diagnostics: validateImportRows(parsed), fingerprint: await fingerprintFile(file), profile: PRODUCT_XLSX_PROFILE_V1 };
 }
 
+/**
+ * Resumable unified pipeline: begin once, send bounded chunks, then finalize.
+ * The server owns row numbering and rejects conflicting retries, so a dropped request
+ * can be retried without silently replacing a previously staged row.
+ */
 export async function stageProductImport(file: File) {
   const parsed = await parseProductWorkbook(file);
   if (parsed.diagnostics.length) return { ...parsed, jobId: null };
+
   const sourceName = file.name.trim().slice(0, MAX_SOURCE_NAME_LENGTH) || 'products.xlsx';
-  const { data, error } = await requireSupabase().rpc('stage_product_import', { p_source_name: sourceName, p_source_fingerprint: parsed.fingerprint, p_rows: parsed.rows });
-  if (error) throw error;
-  return { ...parsed, jobId: assertUuid(data, 'استجابة تجهيز الاستيراد غير صالحة. لم يتم إنشاء مهمة استيراد موثوقة.') };
+  const supabase = requireSupabase();
+  const { data: beginData, error: beginError } = await supabase.rpc('begin_product_import', {
+    p_source_name: sourceName,
+    p_source_fingerprint: parsed.fingerprint,
+    p_total_rows: parsed.rows.length,
+  });
+  if (beginError) throw beginError;
+  const jobId = assertUuid(beginData, 'استجابة بدء الاستيراد غير صالحة. لم يتم إنشاء مهمة استيراد موثوقة.');
+
+  const chunkSize = parsed.rows.length > 20_000 ? 1000 : parsed.rows.length > 5_000 ? 2000 : MAX_SERVER_CHUNK_ROWS;
+  for (let offset = 0; offset < parsed.rows.length; offset += chunkSize) {
+    const chunk = parsed.rows.slice(offset, offset + chunkSize);
+    const { data, error } = await supabase.rpc('stage_product_import_chunk', {
+      p_import_job_id: jobId,
+      p_start_row: offset + 1,
+      p_rows: chunk,
+    });
+    if (error) throw error;
+    assertChunkCount(data, chunk.length);
+  }
+
+  const { data: finalized, error: finalizeError } = await supabase.rpc('finalize_product_import', { p_import_job_id: jobId });
+  if (finalizeError) throw finalizeError;
+  if (!finalized || typeof finalized !== 'object') throw new Error('استجابة إنهاء الاستيراد غير صالحة.');
+  return { ...parsed, jobId };
 }
 
 export async function commitProductImport(importJobId: string, warehouseId: string) {
