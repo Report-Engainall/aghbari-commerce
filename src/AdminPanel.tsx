@@ -6,6 +6,7 @@ import { commitProductImport, stageProductImport } from './services/importExcel'
 import { getCategories, type CategoryOption } from './services/categories';
 import { uploadProductImage } from './services/imagePipeline';
 import { getStaffOrders, transitionOrder, type StaffOrderSummary } from './services/staffOrders';
+import { getStaffDashboardMetrics, type StaffDashboardMetrics } from './services/dashboardMetrics';
 import { supabase } from './lib/supabase';
 import PurchasingPanel from './PurchasingPanel';
 import ExportPanel from './ExportPanel';
@@ -34,6 +35,7 @@ export default function AdminPanel({ role }: { role: UserRole }) {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [orders, setOrders] = useState<StaffOrderSummary[]>([]);
+  const [metrics, setMetrics] = useState<StaffDashboardMetrics | null>(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [product, setProduct] = useState({ sku: '', name: '', unit: 'كرتون', categoryId: '', description: '' });
   const [category, setCategory] = useState({ name: '', slug: '', parentId: '' });
@@ -55,20 +57,30 @@ export default function AdminPanel({ role }: { role: UserRole }) {
     if (!supabase) return;
     setOrdersLoading(true);
     try {
-      const [{ data: productRows, error: productError }, { data: warehouseRows, error: warehouseError }, categoryRows, orderRows] = await Promise.all([
-        supabase.from('products').select('id,sku,name,unit').eq('status', 'active').order('name').limit(200),
+      const [{ data: productRows, error: productError }, { data: warehouseRows, error: warehouseError }, categoryRows, orderRows, dashboardMetrics] = await Promise.all([
+        supabase.from('products').select('id,sku,name,unit').eq('is_active', true).order('name').limit(200),
         supabase.from('warehouses').select('id,name').eq('is_active', true).order('created_at'),
-        getCategories(), getStaffOrders(50)
+        getCategories(), getStaffOrders(50), getStaffDashboardMetrics()
       ]);
       if (productError) throw productError;
       if (warehouseError) throw warehouseError;
-      setProducts((productRows ?? []) as StaffProduct[]); setCategories(categoryRows); setOrders(orderRows);
+      setProducts((productRows ?? []) as StaffProduct[]); setCategories(categoryRows); setOrders(orderRows); setMetrics(dashboardMetrics);
       const nextWarehouses = (warehouseRows ?? []) as Warehouse[]; setWarehouses(nextWarehouses);
       if (!warehouseId && nextWarehouses[0]) setWarehouseId(nextWarehouses[0].id);
     } finally { setOrdersLoading(false); }
   }, [warehouseId]);
 
   useEffect(() => { void reload().catch((e) => setError(e instanceof Error ? e.message : 'تعذر تحميل مركز التحكم.')); }, [reload]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase.channel('aghbari-admin-operational-refresh')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { void reload(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_balances' }, () => { void reload(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'customer_invitations' }, () => { void reload(); })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [reload]);
 
   async function run(action: () => Promise<unknown>, success: string) {
     setBusy(true); setError(null); setMessage(null);
@@ -110,14 +122,25 @@ export default function AdminPanel({ role }: { role: UserRole }) {
   const canFinance = ['owner', 'admin', 'sales'].includes(role);
 
   const operational = useMemo(() => {
+    if (metrics) return {
+      pending: metrics.orders_pending,
+      preparing: metrics.orders_confirmed + metrics.orders_preparing,
+      ready: metrics.orders_ready,
+      completed: metrics.orders_completed,
+      cancelled: metrics.orders_cancelled,
+      value: metrics.completed_sales,
+      stock: metrics.available_stock,
+      receivables: metrics.receivables_issued,
+      customers: metrics.active_customers,
+    };
     const pending = orders.filter((order) => order.status === 'pending').length;
     const preparing = orders.filter((order) => order.status === 'preparing' || order.status === 'confirmed').length;
     const ready = orders.filter((order) => order.status === 'ready').length;
     const completed = orders.filter((order) => order.status === 'completed').length;
     const cancelled = orders.filter((order) => order.status === 'cancelled').length;
     const value = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
-    return { pending, preparing, ready, completed, cancelled, value };
-  }, [orders]);
+    return { pending, preparing, ready, completed, cancelled, value, stock: 0, receivables: 0, customers: 0 };
+  }, [metrics, orders]);
 
   const sections = useMemo(() => [
     canCatalog && ['catalog-admin', 'المنتجات والأسعار'],
@@ -133,8 +156,11 @@ export default function AdminPanel({ role }: { role: UserRole }) {
       <article className="command-stat command-stat-primary"><span>الطلبات قيد المراجعة</span><strong>{operational.pending}</strong><small>{operational.pending ? 'تحتاج إجراءً الآن' : 'لا توجد طلبات معلقة'}</small></article>
       <article className="command-stat"><span>قيد التجهيز</span><strong>{operational.preparing}</strong><small>مؤكد أو قيد التجهيز</small></article>
       <article className="command-stat"><span>جاهز للتسليم</span><strong>{operational.ready}</strong><small>بانتظار الإكمال</small></article>
-      <article className="command-stat"><span>مكتمل</span><strong>{operational.completed}</strong><small>من الطلبات الظاهرة</small></article>
-      <article className="command-stat"><span>قيمة الطلبات</span><strong>{formatMoney(operational.value)}</strong><small>{operational.cancelled} ملغي</small></article>
+      <article className="command-stat"><span>مكتمل</span><strong>{operational.completed}</strong><small>من جميع الطلبات</small></article>
+      <article className="command-stat"><span>المبيعات المكتملة</span><strong>{formatMoney(operational.value)}</strong><small>{operational.cancelled} ملغي</small></article>
+      <article className="command-stat"><span>المخزون المتوفر</span><strong>{operational.stock.toLocaleString('ar-YE')}</strong><small>من المصدر التشغيلي</small></article>
+      <article className="command-stat"><span>الذمم المستحقة</span><strong>{formatMoney(operational.receivables)}</strong><small>الفواتير الصادرة غير المسددة بالكامل</small></article>
+      <article className="command-stat"><span>العملاء النشطون</span><strong>{operational.customers}</strong><small>حسابات العملاء داخل الشركة</small></article>
     </div>
     {sections.length > 0 && <nav className="command-nav" aria-label="أقسام مركز التحكم">{sections.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}</nav>}
     <div className="admin-grid" id="catalog-admin">
@@ -167,7 +193,7 @@ export default function AdminPanel({ role }: { role: UserRole }) {
       </form>}
     </div>
     <div id="orders-admin">
-      {canOrderWorkflow && <div className="cart-panel"><div className="section-heading"><div><span className="eyebrow">التشغيل</span><h2>إدارة الطلبات</h2></div><span>{orders.length} طلبات</span></div>{ordersLoading ? <div className="cart-empty">جارٍ تحميل الطلبات…</div> : !orders.length ? <div className="cart-empty">لا توجد طلبات تشغيلية بعد.</div> : <div className="cart-lines">{orders.map((order) => <article className="cart-line" key={order.id}><div><strong>طلب #{order.order_number}</strong><small>العميل: {order.customer_name}</small></div><div><strong>{formatMoney(order.total)} {order.currency}</strong><small>الحالة: {STATUS_LABELS[order.status]}</small></div><div className="status-actions">{allowedNextStatuses(order.status, role).map((next) => <button key={next} disabled={busy} onClick={() => void changeOrderStatus(order.id, next)} aria-label={`تحويل الطلب ${order.order_number} إلى ${STATUS_LABELS[next]}`}>{STATUS_LABELS[next]}</button>)}</div></article>)}</div>}</div>}
+      {canOrderWorkflow && <div className="cart-panel"><div className="section-heading"><div><span className="eyebrow">التشغيل</span><h2>إدارة الطلبات</h2></div><span>{orders.length} طلبات ظاهرة</span></div>{ordersLoading ? <div className="cart-empty">جارٍ تحميل الطلبات…</div> : !orders.length ? <div className="cart-empty">لا توجد طلبات تشغيلية بعد.</div> : <div className="cart-lines">{orders.map((order) => <article className="cart-line" key={order.id}><div><strong>طلب #{order.order_number}</strong><small>العميل: {order.customer_name}</small></div><div><strong>{formatMoney(order.total)} {order.currency}</strong><small>الحالة: {STATUS_LABELS[order.status]}</small></div><div className="status-actions">{allowedNextStatuses(order.status, role).map((next) => <button key={next} disabled={busy} onClick={() => void changeOrderStatus(order.id, next)} aria-label={`تحويل الطلب ${order.order_number} إلى ${STATUS_LABELS[next]}`}>{STATUS_LABELS[next]}</button>)}</div></article>)}</div>}</div>}
     </div>
     {error && <div className="error-banner" role="alert">{error}</div>}{message && <div className="success" role="status">{message}</div>}
     <div id="inventory-admin">{canInventory && <InventoryPanel role={role} />}</div>
