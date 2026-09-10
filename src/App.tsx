@@ -98,10 +98,12 @@ export default function App() {
     const client = supabase;
     if (!signedIn || !client || !isOnline) return; let cancelled = false;
     async function loadRuntime() {
+      const runtimeClient = supabase;
+      if (!runtimeClient) return;
       setCatalogLoading(true); setRuntimeError(null);
       try {
         const [{ data: warehouse, error: warehouseError }, items, savedCart, categories] = await Promise.all([
-          client.from('warehouses').select('id').eq('is_active', true).order('created_at').limit(1).maybeSingle(),
+          runtimeClient.from('warehouses').select('id').eq('is_active', true).order('created_at').limit(1).maybeSingle(),
           getCatalog(catalogSearch, categoryId, 100, 0), getCart(), getCategories()
         ]);
         if (warehouseError) throw warehouseError;
