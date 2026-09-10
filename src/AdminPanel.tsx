@@ -54,12 +54,13 @@ export default function AdminPanel({ role }: { role: UserRole }) {
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    if (!supabase) return;
+    const client = supabase;
+    if (!client) return;
     setOrdersLoading(true);
     try {
       const [{ data: productRows, error: productError }, { data: warehouseRows, error: warehouseError }, categoryRows, orderRows, dashboardMetrics] = await Promise.all([
-        supabase.from('products').select('id,sku,name,unit').eq('is_active', true).order('name').limit(200),
-        supabase.from('warehouses').select('id,name').eq('is_active', true).order('created_at'),
+        client.from('products').select('id,sku,name,unit').eq('is_active', true).order('name').limit(200),
+        client.from('warehouses').select('id,name').eq('is_active', true).order('created_at'),
         getCategories(), getStaffOrders(50), getStaffDashboardMetrics()
       ]);
       if (productError) throw productError;
@@ -73,13 +74,14 @@ export default function AdminPanel({ role }: { role: UserRole }) {
   useEffect(() => { void reload().catch((e) => setError(e instanceof Error ? e.message : 'تعذر تحميل مركز التحكم.')); }, [reload]);
 
   useEffect(() => {
-    if (!supabase) return;
-    const channel = supabase.channel('aghbari-admin-operational-refresh')
+    const client = supabase;
+    if (!client) return;
+    const channel = client.channel('aghbari-admin-operational-refresh')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { void reload(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_balances' }, () => { void reload(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'customer_invitations' }, () => { void reload(); })
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    return () => { void client.removeChannel(channel); };
   }, [reload]);
 
   async function run(action: () => Promise<unknown>, success: string) {
