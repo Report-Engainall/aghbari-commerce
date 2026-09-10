@@ -20,9 +20,6 @@ trap 'rm -f "$TMP" "$RUNTIME_TMP"' EXIT
 
 mkdir -p "$CANONICAL"
 
-# PostgreSQL emits dependency-aware DDL for the complete public schema:
-# tables, columns/defaults/generated/identity, types, constraints, indexes,
-# functions, triggers and RLS policies. No owner/privilege statements are emitted here.
 pg_dump "$DB_URL" \
   --schema-only \
   --schema=public \
@@ -30,14 +27,11 @@ pg_dump "$DB_URL" \
   --no-privileges \
   --file="$TMP"
 
-# Supabase runtime metadata not guaranteed by pg_dump is emitted separately:
-# Realtime publication membership, RLS enablement, and explicit ACL grants.
 if [[ -f "$ROOT/supabase/tools/emit_canonical_runtime.sql" ]]; then
   psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$ROOT/supabase/tools/emit_canonical_runtime.sql" > "$RUNTIME_TMP"
 fi
 
-# Split pg_dump into deterministic executable atomic chunks. Each pg_dump object
-# remains byte-for-byte intact; only complete object blocks are classified.
+# Split complete pg_dump object blocks into deterministic executable chunks.
 python3 - "$TMP" "$CANONICAL" <<'PY'
 import pathlib
 import re
@@ -46,18 +40,13 @@ import sys
 src = pathlib.Path(sys.argv[1])
 out = pathlib.Path(sys.argv[2])
 text = src.read_text(encoding="utf-8")
-
-# pg_dump emits object blocks beginning with a stable '-- Name:' catalog header.
-# Preserve preamble in the first chunk. Unknown public-schema object kinds stay in
-# chunk 01 so they are not silently discarded.
 starts = [m.start() for m in re.finditer(r"(?m)^-- Name: .+?; Type: .+?; Schema: public;", text)]
 blocks = []
 if starts:
     if starts[0] > 0:
         blocks.append(("preamble", text[:starts[0]]))
     for i, pos in enumerate(starts):
-        end = starts[i + 1] if i + 1 < len(starts) else len(text)
-        blocks.append(("object", text[pos:end]))
+        blocks.append(("object", text[pos: starts[i + 1] if i + 1 < len(starts) else len(text)]))
 else:
     blocks = [("preamble", text)]
 
@@ -65,18 +54,15 @@ chunks = {"01_tables_and_constraints.sql": [],
           "02_functions_and_triggers.sql": [],
           "03_rls_and_acls.sql": [],
           "04_indexes_and_realtime.sql": []}
-
 for kind, block in blocks:
     if kind == "preamble":
         chunks["01_tables_and_constraints.sql"].append(block)
         continue
     m = re.search(r"^-- Name: .*?; Type: ([^;]+); Schema: public;", block, re.M)
     obj_type = (m.group(1).strip().upper() if m else "UNKNOWN")
-    if obj_type in {"FUNCTION", "PROCEDURE"}:
+    if obj_type in {"FUNCTION", "PROCEDURE", "TRIGGER"}:
         target = "02_functions_and_triggers.sql"
-    elif obj_type in {"TRIGGER"}:
-        target = "02_functions_and_triggers.sql"
-    elif obj_type in {"POLICY"}:
+    elif obj_type == "POLICY":
         target = "03_rls_and_acls.sql"
     elif obj_type in {"INDEX", "INDEX ATTACHED TO"}:
         target = "04_indexes_and_realtime.sql"
@@ -94,11 +80,29 @@ for name, parts in chunks.items():
     (out / name).write_text(headers[name] + "\n".join(parts), encoding="utf-8")
 PY
 
-# Runtime overlay is intentionally appended to the relevant chunks and the master
-# aggregator. This keeps Realtime/RLS/ACL evidence executable and reviewable.
 if [[ -s "$RUNTIME_TMP" ]]; then
-  cat "$RUNTIME_TMP" >> "$CANONICAL/03_rls_and_acls.sql"
-  cat "$RUNTIME_TMP" >> "$CANONICAL/04_indexes_and_realtime.sql"
+  python3 - "$RUNTIME_TMP" "$CANONICAL" <<'PY'
+import pathlib
+import sys
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+out = pathlib.Path(sys.argv[2])
+start1, end1 = "-- RUNTIME_RLS_ACL_BEGIN", "-- RUNTIME_RLS_ACL_END"
+start2, end2 = "-- RUNTIME_REALTIME_BEGIN", "-- RUNTIME_REALTIME_END"
+
+def section(a, b):
+    if a not in text or b not in text:
+        return ""
+    return text.split(a, 1)[1].split(b, 1)[0].strip()
+
+rls = section(start1, end1)
+realtime = section(start2, end2)
+if rls:
+    with (out / "03_rls_and_acls.sql").open("a", encoding="utf-8") as f:
+        f.write("\n\n-- LIVE RUNTIME SECURITY OVERLAY\n" + rls + "\n")
+if realtime:
+    with (out / "04_indexes_and_realtime.sql").open("a", encoding="utf-8") as f:
+        f.write("\n\n-- LIVE SUPABASE REALTIME OVERLAY\n" + realtime + "\n")
+PY
 fi
 
 {
