@@ -32,17 +32,16 @@ jobs:
           from pathlib import Path
           import re
 
-          expected = {
-              'supabase/canonical/01_tables_and_constraints.sql': (r'^CREATE TABLE public\\.', 100),
-              'supabase/canonical/02_functions_and_triggers.sql': (r'^CREATE (?:OR REPLACE )?FUNCTION public\\.', 98),
-              'supabase/canonical/02_functions_and_triggers.sql': (r'^CREATE (?:OR REPLACE )?FUNCTION public\\.', 98),
-              'supabase/canonical/03_rls_and_acls.sql': (r'^CREATE POLICY ', 179),
-          }
-          for path, (pattern, minimum) in expected.items():
+          checks = [
+              ('supabase/canonical/01_tables_and_constraints.sql', r'^CREATE TABLE public\\.', 100),
+              ('supabase/canonical/02_functions_and_triggers.sql', r'^CREATE (?:OR REPLACE )?FUNCTION public\\.', 98),
+              ('supabase/canonical/03_rls_and_acls.sql', r'^CREATE POLICY ', 179),
+          ]
+          for path, pattern, expected in checks:
               text = Path(path).read_text(encoding='utf-8')
               count = len(re.findall(pattern, text, re.M))
-              if count != minimum:
-                  raise SystemExit(f'ARTIFACT COUNT FAIL: {path}: expected {minimum}, got {count}')
+              if count != expected:
+                  raise SystemExit(f'ARTIFACT COUNT FAIL: {path}: expected {expected}, got {count}')
 
           trigger_text = Path('supabase/canonical/02_functions_and_triggers.sql').read_text(encoding='utf-8')
           trigger_count = len(re.findall(r'^CREATE TRIGGER ', trigger_text, re.M))
