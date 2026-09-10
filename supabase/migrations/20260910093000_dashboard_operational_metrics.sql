@@ -17,33 +17,49 @@ returns table(
   available_stock numeric,
   receivables_issued numeric
 )
-language sql
+language plpgsql
 security invoker
 set search_path = public, pg_catalog
 as $$
-  with org as (select public.current_organization_id() as organization_id)
+declare
+  v_company uuid := public.current_company_id();
+  v_receivables numeric := 0;
+begin
+  if v_company is null then
+    return query select 0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::bigint,0::numeric,0::bigint,0::bigint,0::numeric,0::numeric;
+    return;
+  end if;
+
+  -- Finance is optional in the current schema lineage. If invoices exist, include only
+  -- issued invoices so the KPI never invents a receivable from an unavailable source.
+  if to_regclass('public.operational_invoices') is not null then
+    execute 'select coalesce(sum(total),0) from public.operational_invoices where company_id = $1 and status = ''issued''' into v_receivables using v_company;
+  end if;
+
+  return query
   select
-    (select count(*) from public.orders o, org where o.organization_id = org.organization_id),
-    (select count(*) from public.orders o, org where o.organization_id = org.organization_id and o.status = 'pending'),
-    (select count(*) from public.orders o, org where o.organization_id = org.organization_id and o.status = 'confirmed'),
-    (select count(*) from public.orders o, org where o.organization_id = org.organization_id and o.status = 'preparing'),
-    (select count(*) from public.orders o, org where o.organization_id = org.organization_id and o.status = 'ready'),
-    (select count(*) from public.orders o, org where o.organization_id = org.organization_id and o.status = 'completed'),
-    (select count(*) from public.orders o, org where o.organization_id = org.organization_id and o.status = 'cancelled'),
-    coalesce((select sum(o.total) from public.orders o, org where o.organization_id = org.organization_id and o.status = 'completed'), 0),
-    (select count(*) from public.customers c, org where c.organization_id = org.organization_id and c.is_active),
-    (select count(*) from public.products p, org where p.organization_id = org.organization_id and p.status = 'active'),
-    coalesce((select sum(ib.quantity) from public.inventory_balances ib, org where ib.organization_id = org.organization_id), 0),
-    coalesce((select sum(i.total) from public.operational_invoices i, org where i.organization_id = org.organization_id and i.status = 'issued'), 0);
+    (select count(*) from public.orders o where o.company_id = v_company),
+    (select count(*) from public.orders o where o.company_id = v_company and o.status = 'pending'),
+    (select count(*) from public.orders o where o.company_id = v_company and o.status = 'confirmed'),
+    (select count(*) from public.orders o where o.company_id = v_company and o.status = 'preparing'),
+    (select count(*) from public.orders o where o.company_id = v_company and o.status = 'ready'),
+    (select count(*) from public.orders o where o.company_id = v_company and o.status = 'completed'),
+    (select count(*) from public.orders o where o.company_id = v_company and o.status = 'cancelled'),
+    coalesce((select sum(o.total) from public.orders o where o.company_id = v_company and o.status = 'completed'), 0),
+    (select count(*) from public.customers c where c.company_id = v_company and c.is_active),
+    (select count(*) from public.products p where p.company_id = v_company and p.is_active),
+    coalesce((select sum(ib.quantity) from public.inventory_balances ib where ib.company_id = v_company), 0),
+    v_receivables;
+end;
 $$;
 
 grant execute on function public.get_staff_dashboard_metrics() to authenticated;
 revoke execute on function public.get_staff_dashboard_metrics() from anon;
 
-comment on function public.get_staff_dashboard_metrics() is 'Returns tenant-scoped operational KPIs from canonical orders, customers, products, inventory and issued invoices.';
+comment on function public.get_staff_dashboard_metrics() is 'Returns tenant-scoped operational KPIs from canonical orders, customers, products, inventory and optional issued invoices.';
 
--- Enable the simple Postgres Changes signal for the operational surfaces.
--- RLS remains the authorization boundary; events are used as a refresh signal, not as source of truth.
+-- Enable Postgres Changes as a refresh signal. RLS remains the authorization boundary;
+-- realtime events are never treated as the source of business truth.
 do $$
 begin
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'orders') then
@@ -52,10 +68,9 @@ begin
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'inventory_balances') then
     execute 'alter publication supabase_realtime add table public.inventory_balances';
   end if;
-  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'customer_invitations') then
+  if to_regclass('public.customer_invitations') is not null and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'customer_invitations') then
     execute 'alter publication supabase_realtime add table public.customer_invitations';
   end if;
 exception when undefined_object then
-  -- A local/non-Realtime database may not have the publication yet.
   null;
 end $$;
