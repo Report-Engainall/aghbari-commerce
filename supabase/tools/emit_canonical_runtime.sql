@@ -4,20 +4,13 @@
 \pset format unaligned
 \pset pager off
 
+\echo -- RUNTIME_RLS_ACL_BEGIN
+
 -- RLS enablement is normally included by pg_dump; keep this explicit for parity.
 select format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', c.relname)
 from pg_class c join pg_namespace n on n.oid=c.relnamespace
 where n.nspname='public' and c.relkind='r' and c.relrowsecurity
 order by c.relname;
-
--- Realtime publication membership.
-select format('ALTER PUBLICATION %I ADD TABLE public.%I;', p.pubname, c.relname)
-from pg_publication p
-join pg_publication_rel pr on pr.prpubid=p.oid
-join pg_class c on c.oid=pr.prrelid
-join pg_namespace n on n.oid=c.relnamespace
-where n.nspname='public'
-order by p.pubname,c.relname;
 
 -- Table ACLs; owner privileges are implicit and therefore excluded.
 select format('GRANT %s ON TABLE public.%I TO %s;',
@@ -49,3 +42,17 @@ left join pg_roles r on r.oid=x.grantee
 where n.nspname='public' and p.prokind='f'
   and x.privilege_type='EXECUTE' and x.grantee <> p.proowner
 order by p.proname,pg_get_function_identity_arguments(p.oid),x.grantee;
+
+\echo -- RUNTIME_RLS_ACL_END
+\echo -- RUNTIME_REALTIME_BEGIN
+
+-- Realtime publication membership.
+select format('ALTER PUBLICATION %I ADD TABLE public.%I;', p.pubname, c.relname)
+from pg_publication p
+join pg_publication_rel pr on pr.prpubid=p.oid
+join pg_class c on c.oid=pr.prrelid
+join pg_namespace n on n.oid=c.relnamespace
+where n.nspname='public'
+order by p.pubname,c.relname;
+
+\echo -- RUNTIME_REALTIME_END
