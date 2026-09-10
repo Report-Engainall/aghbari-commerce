@@ -2,9 +2,9 @@
 -- Purpose: emit executable public-schema DDL from the LIVE canonical database.
 -- This is an emitter, not the baseline itself. Run against the canonical live DB with
 -- an operator capable of saving the result verbatim to a .sql file.
--- Order: extensions/types -> tables -> local constraints -> foreign keys -> functions
--- -> RLS -> indexes -> triggers -> grants.
 -- Safety: read-only; contains no CREATE/ALTER/DROP against the source database.
+-- Coverage: extensions, custom types, tables, identity/generated/defaults, constraints,
+-- functions, RLS, indexes, triggers, ACLs, sequences, replica identity, realtime publication.
 
 \pset tuples_only on
 \pset format unaligned
@@ -14,7 +14,7 @@ select '-- CANONICAL BASELINE GENERATED FROM LIVE CATALOG --';
 select '-- generated_at=' || clock_timestamp()::text;
 select '-- source_schema=public';
 
--- Extensions
+-- Extensions installed outside pg_catalog/plpgsql.
 select format('CREATE EXTENSION IF NOT EXISTS %I WITH SCHEMA %I;', e.extname, n.nspname)
 from pg_extension e
 join pg_namespace n on n.oid=e.extnamespace
@@ -94,7 +94,7 @@ join pg_namespace n on n.oid=c.relnamespace
 where n.nspname='public'
 order by c.relname, pol.polname;
 
--- Non-constraint indexes. PK/UNIQUE indexes are already created by their constraints.
+-- Non-constraint indexes. PK/UNIQUE indexes are created by their constraints.
 select pg_get_indexdef(i.indexrelid) || ';'
 from pg_index i
 join pg_class ic on ic.oid=i.indexrelid
@@ -104,7 +104,7 @@ where n.nspname='public'
   and not exists (select 1 from pg_constraint con where con.conindid=i.indexrelid)
 order by tc.relname, ic.relname;
 
--- Exact trigger definitions. pg_get_triggerdef is authoritative and executable.
+-- Exact trigger definitions.
 select regexp_replace(pg_get_triggerdef(t.oid, true), ';?$', ';')
 from pg_trigger t
 join pg_class c on c.oid=t.tgrelid
@@ -112,21 +112,73 @@ join pg_namespace n on n.oid=c.relnamespace
 where n.nspname='public' and not t.tgisinternal
 order by c.relname, t.tgname;
 
--- Table grants. information_schema presents normalized explicit grants.
-select format('GRANT %s ON TABLE public.%I TO %I;',
-  string_agg(privilege_type, ', ' order by privilege_type), table_name, grantee)
-from information_schema.role_table_grants
-where table_schema='public'
-group by table_name, grantee
-order by table_name, grantee;
+-- Sequence definitions and ownership. Identity sequence properties are preserved explicitly.
+select format('CREATE SEQUENCE public.%I AS %s START WITH %s INCREMENT BY %s MINVALUE %s MAXVALUE %s %s CACHE %s;',
+  c.relname, pg_catalog.format_type(s.seqtypid,null), s.seqstart, s.seqincrement, s.seqmin, s.seqmax,
+  case when s.seqcycle then 'CYCLE' else 'NO CYCLE' end, s.seqcache)
+from pg_sequence s
+join pg_class c on c.oid=s.seqrelid
+join pg_namespace n on n.oid=c.relnamespace
+where n.nspname='public'
+order by c.relname;
 
--- Sequence grants. Filter the usage view to sequence objects.
-select format('GRANT %s ON SEQUENCE public.%I TO %I;',
-  string_agg(privilege_type, ', ' order by privilege_type), object_name, grantee)
-from information_schema.role_usage_grants
-where object_schema='public' and object_type='SEQUENCE'
-group by object_name, grantee
-order by object_name, grantee;
+-- Sequence-to-column ownership, including identity ownership.
+select format('ALTER SEQUENCE public.%I OWNED BY public.%I.%I;', seq.relname, tbl.relname, att.attname)
+from pg_class seq
+join pg_namespace sn on sn.oid=seq.relnamespace
+join pg_depend d on d.objid=seq.oid and d.deptype in ('a','i')
+join pg_class tbl on tbl.oid=d.refobjid
+join pg_namespace tn on tn.oid=tbl.relnamespace
+join pg_attribute att on att.attrelid=tbl.oid and att.attnum=d.refobjsubid
+where sn.nspname='public' and seq.relkind='S' and tn.nspname='public'
+order by seq.relname;
+
+-- Replica identity is relevant to realtime/update/delete correctness.
+select case c.relreplident
+  when 'd' then format('-- REPLICA IDENTITY DEFAULT: public.%I', c.relname)
+  when 'n' then format('ALTER TABLE public.%I REPLICA IDENTITY NOTHING;', c.relname)
+  when 'f' then format('ALTER TABLE public.%I REPLICA IDENTITY FULL;', c.relname)
+  when 'i' then format('ALTER TABLE public.%I REPLICA IDENTITY USING INDEX %I;', c.relname, idx.relname)
+end
+from pg_class c
+join pg_namespace n on n.oid=c.relnamespace
+left join pg_index ix on ix.indrelid=c.oid and ix.indisreplident
+left join pg_class idx on idx.oid=ix.indexrelid
+where n.nspname='public' and c.relkind='r'
+order by c.relname;
+
+-- Supabase Realtime publication membership is schema/runtime configuration and must survive replay.
+select format('ALTER PUBLICATION %I ADD TABLE public.%I;', p.pubname, c.relname)
+from pg_publication p
+join pg_publication_rel pr on pr.prpubid=p.oid
+join pg_class c on c.oid=pr.prrelid
+join pg_namespace n on n.oid=c.relnamespace
+where n.nspname='public'
+order by p.pubname,c.relname;
+
+-- Table ACLs from pg_class, including PUBLIC; exclude implicit owner privileges.
+select format('GRANT %s ON TABLE public.%I TO %s;',
+  string_agg(x.privilege_type, ', ' order by x.privilege_type), c.relname,
+  case when x.grantee=0 then 'PUBLIC' else quote_ident(r.rolname) end)
+from pg_class c
+join pg_namespace n on n.oid=c.relnamespace
+cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) x
+left join pg_roles r on r.oid=x.grantee
+where n.nspname='public' and c.relkind='r' and x.grantee <> c.relowner
+group by c.relname, x.grantee, r.rolname
+order by c.relname, x.grantee;
+
+-- Sequence ACLs, including PUBLIC; exclude implicit owner privileges.
+select format('GRANT %s ON SEQUENCE public.%I TO %s;',
+  string_agg(x.privilege_type, ', ' order by x.privilege_type), c.relname,
+  case when x.grantee=0 then 'PUBLIC' else quote_ident(r.rolname) end)
+from pg_class c
+join pg_namespace n on n.oid=c.relnamespace
+cross join lateral aclexplode(coalesce(c.relacl, acldefault('S', c.relowner))) x
+left join pg_roles r on r.oid=x.grantee
+where n.nspname='public' and c.relkind='S' and x.grantee <> c.relowner
+group by c.relname, x.grantee, r.rolname
+order by c.relname, x.grantee;
 
 -- Function EXECUTE grants with exact overloaded signatures.
 select format('GRANT EXECUTE ON FUNCTION public.%I(%s) TO %s;',
