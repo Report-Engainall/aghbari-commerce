@@ -28,6 +28,33 @@ jobs:
           test -s supabase/canonical/03_rls_and_acls.sql
           test -s supabase/canonical/04_indexes_and_realtime.sql
           test -s supabase/canonical_baseline.sql
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          expected = {
+              'supabase/canonical/01_tables_and_constraints.sql': (r'^CREATE TABLE public\\.', 100),
+              'supabase/canonical/02_functions_and_triggers.sql': (r'^CREATE (?:OR REPLACE )?FUNCTION public\\.', 98),
+              'supabase/canonical/02_functions_and_triggers.sql': (r'^CREATE (?:OR REPLACE )?FUNCTION public\\.', 98),
+              'supabase/canonical/03_rls_and_acls.sql': (r'^CREATE POLICY ', 179),
+          }
+          for path, (pattern, minimum) in expected.items():
+              text = Path(path).read_text(encoding='utf-8')
+              count = len(re.findall(pattern, text, re.M))
+              if count != minimum:
+                  raise SystemExit(f'ARTIFACT COUNT FAIL: {path}: expected {minimum}, got {count}')
+
+          trigger_text = Path('supabase/canonical/02_functions_and_triggers.sql').read_text(encoding='utf-8')
+          trigger_count = len(re.findall(r'^CREATE TRIGGER ', trigger_text, re.M))
+          if trigger_count != 16:
+              raise SystemExit(f'ARTIFACT COUNT FAIL: triggers expected 16, got {trigger_count}')
+
+          full = Path('supabase/canonical_baseline.sql').read_text(encoding='utf-8')
+          for forbidden in ('organizations', 'operational_invoices', 'current_organization_id'):
+              if forbidden in full:
+                  raise SystemExit(f'FORBIDDEN LEGACY TOKEN IN ARTIFACT: {forbidden}')
+          print('ARTIFACT STRUCTURAL GATE: PASS (100 tables / 98 functions / 179 policies / 16 triggers; forbidden legacy scan clean)')
+          PY
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tools/verify_canonical_baseline.sql
       - name: Commit generated chunks
         run: |
