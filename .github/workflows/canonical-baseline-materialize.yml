@@ -1,0 +1,37 @@
+name: canonical-baseline-materialize
+on:
+  push:
+    branches: [reconstruction/canonical-lineage]
+    paths:
+      - 'supabase/tools/export_canonical_baseline.sh'
+      - 'supabase/tools/emit_canonical_runtime.sql'
+      - 'supabase/canonical/**'
+  workflow_dispatch:
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Materialize canonical chunks
+        env:
+          DATABASE_URL: ${{ secrets.CANONICAL_DATABASE_URL }}
+        run: |
+          test -n "$DATABASE_URL"
+          bash supabase/tools/export_canonical_baseline.sh
+          test -s supabase/canonical/01_tables_and_constraints.sql
+          test -s supabase/canonical/02_functions_and_triggers.sql
+          test -s supabase/canonical/03_rls_and_acls.sql
+          test -s supabase/canonical/04_indexes_and_realtime.sql
+          git status --short
+      - name: Commit generated chunks
+        run: |
+          git config user.name 'canonical-baseline-bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add supabase/canonical
+          git diff --cached --quiet && exit 0
+          git commit -m 'chore(canonical): materialize live baseline chunks'
+          git push origin HEAD:reconstruction/canonical-lineage
