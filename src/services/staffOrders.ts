@@ -29,4 +29,17 @@ export function assertStaffOrderSummary(value: unknown): StaffOrderSummary {
   return { id, order_number: orderNumber, customer_id: customerId, customer_name: customerName, warehouse_id: warehouseId, status: status as OrderStatus, total, currency, created_at: createdAt, updated_at: updatedAt };
 }
 export async function getStaffOrders(limit = 50): Promise<StaffOrderSummary[]> { const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 100); const { data, error } = await requireSupabase().from('orders').select('id,order_number,customer_id,warehouse_id,status,total,currency,created_at,updated_at,customers(name)').order('created_at', { ascending: false }).limit(safeLimit); if (error) throw error; return (data ?? []).map((row) => { const item = row as typeof row & { customers?: { name?: string } | null }; return assertStaffOrderSummary({ id: item.id, order_number: Number(item.order_number), customer_id: item.customer_id, customer_name: item.customers?.name ?? 'عميل غير معروف', warehouse_id: item.warehouse_id, status: item.status, total: typeof item.total === 'number' ? item.total : Number(item.total), currency: item.currency, created_at: item.created_at, updated_at: item.updated_at }); }); }
-export async function transitionOrder(orderId: string, toStatus: OrderStatus): Promise<StaffOrderSummary> { if (typeof orderId !== 'string' || !UUID_PATTERN.test(orderId)) throw new Error('معرّف الطلب غير صالح.'); if (typeof toStatus !== 'string' || !ORDER_STATUSES.has(toStatus)) throw new Error('حالة انتقال الطلب غير صالحة.'); const { data, error } = await requireSupabase().rpc('transition_order', { p_order_id: orderId, p_to_status: toStatus }); if (error) throw error; return assertStaffOrderSummary(data as unknown); }
+export async function transitionOrder(orderId: string, toStatus: OrderStatus): Promise<StaffOrderSummary> {
+  if (typeof orderId !== 'string' || !UUID_PATTERN.test(orderId)) throw new Error('معرّف الطلب غير صالح.');
+  if (typeof toStatus !== 'string' || !ORDER_STATUSES.has(toStatus)) throw new Error('حالة انتقال الطلب غير صالحة.');
+  const client = requireSupabase();
+  const { data, error } = await client.rpc('transition_order', { p_order_id: orderId, p_to_status: toStatus });
+  if (error) throw error;
+  const updatedId = (data as { id?: unknown } | null)?.id;
+  if (typeof updatedId !== 'string' || !UUID_PATTERN.test(updatedId)) throw new Error('لم يتم إرجاع معرّف الطلب بعد الانتقال. لم يتم إثبات نجاح العملية.');
+  const { data: row, error: reloadError } = await client.from('orders').select('id,order_number,customer_id,warehouse_id,status,total,currency,created_at,updated_at,customers(name)').eq('id', updatedId).maybeSingle();
+  if (reloadError) throw reloadError;
+  if (!row) throw new Error('تم تنفيذ انتقال الطلب لكن تعذر قراءة الحالة المحدثة. لم يتم إثبات نجاح العملية.');
+  const item = row as typeof row & { customers?: { name?: string } | null };
+  return assertStaffOrderSummary({ id: item.id, order_number: Number(item.order_number), customer_id: item.customer_id, customer_name: item.customers?.name ?? 'عميل غير معروف', warehouse_id: item.warehouse_id, status: item.status, total: typeof item.total === 'number' ? item.total : Number(item.total), currency: item.currency, created_at: item.created_at, updated_at: item.updated_at });
+}
