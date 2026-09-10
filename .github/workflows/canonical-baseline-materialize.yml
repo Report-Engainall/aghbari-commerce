@@ -5,6 +5,7 @@ on:
     paths:
       - 'supabase/tools/export_canonical_baseline.sh'
       - 'supabase/tools/emit_canonical_runtime.sql'
+      - 'supabase/tools/verify_canonical_baseline.sql'
       - 'supabase/canonical/**'
   workflow_dispatch:
 jobs:
@@ -26,12 +27,13 @@ jobs:
           test -s supabase/canonical/02_functions_and_triggers.sql
           test -s supabase/canonical/03_rls_and_acls.sql
           test -s supabase/canonical/04_indexes_and_realtime.sql
-          git status --short
+          test -s supabase/canonical_baseline.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tools/verify_canonical_baseline.sql
       - name: Commit generated chunks
         run: |
           git config user.name 'canonical-baseline-bot'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add supabase/canonical
+          git add supabase/canonical supabase/canonical_baseline.sql
           git diff --cached --quiet && exit 0
           git commit -m 'chore(canonical): materialize live baseline chunks'
           git push origin HEAD:reconstruction/canonical-lineage
