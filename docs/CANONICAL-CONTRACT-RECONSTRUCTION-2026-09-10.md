@@ -28,19 +28,39 @@ Canonical target chain:
 
 `record_sales_payment()` is an overlapping route with materially different behavior: it resolves the invoice before tenant context is established, performs its own membership check, and does not update `cash_accounts`. It must remain represented in the baseline until consumer/provenance analysis proves it can be deprecated. No merge or deletion by assumption.
 
-## Function dependency ordering
+## Body-level function dependency extraction
 
-Function creation order must account for body-level references that may not be fully represented by `pg_depend`.
+A live catalog query compared every public function body against the names of all other public functions. This produces a conservative body-reference graph and is intentionally broader than `pg_depend`; it can include textual references that are not executable calls, so final ordering still requires contract review.
 
-Observed dependency chains include:
+Observed executable-looking dependency chains include:
 
-- `can_enter_phase_l_autonomy()` → `can_certify_autonomous_domain()` → `is_continuous_trust_healthy()` → `is_trust_certificate_valid()`
+- `can_enter_phase_l_autonomy()` → `can_certify_autonomous_domain()` and `compute_control_plane_health()`
+- `can_certify_autonomous_domain()` → `is_continuous_trust_healthy()`
+- `is_continuous_trust_healthy()` → `is_trust_certificate_valid()`
 - `autonomy_runtime_gate()` → `can_enter_phase_l_autonomy()` / `compute_control_plane_health()` / `is_continuous_trust_healthy()`
 - `convert_operational_task_proposal()` → `create_decision_work_item()`
-- `import_commit_batch_governed()` → `import_commit_batch_with_lineage()` → `import_commit_batch()` → `import_upsert_*()`
-- Customer cart/order contracts depend on `current_customer_company_id()` and `current_customer_id()`.
+- `import_commit_batch_governed()` → `import_commit_batch_with_lineage()` / `import_commit_batch()` / `normalize_import_key()`
+- `import_commit_batch_with_lineage()` → `import_commit_batch()`
+- `import_commit_batch()` → `import_upsert_customer()` / `import_upsert_product()` / `import_upsert_sales_invoice()`
+- `import_upsert_customer()` / `import_upsert_product()` / `import_upsert_sales_invoice()` → `normalize_import_key()`
+- Customer cart/order contracts → `current_customer_company_id()` and `current_customer_id()`.
+- Most staff/report/finance/runtime functions → `current_company_id()`.
 
-Therefore executable baseline ordering cannot be generated solely from catalog dependency metadata.
+The dependency graph has a large common authority root at `current_company_id()` plus a separate customer authority root at `current_customer_company_id()` / `current_customer_id()`. This means helper functions must be created before their dependents, while mutually recursive or ambiguous textual references must be reviewed rather than blindly topologically sorted.
+
+## Proposed executable creation tiers
+
+1. Extensions, schemas, base types and sequences.
+2. Tenant base tables: `companies` and identity/membership foundations.
+3. Structural tables and foreign keys that do not depend on runtime functions.
+4. Canonical helper functions: tenant/customer authority and pure normalization helpers.
+5. Domain RPCs in dependency order: import, commerce, finance, intelligence/governance.
+6. Trigger functions and triggers, after their referenced functions/tables exist.
+7. RLS enablement and policies, after authority helpers and referenced tables/functions exist.
+8. Explicit grants/revokes, after functions/tables/policies exist.
+9. Final indexes/constraints that require all referenced relations, followed by verification queries.
+
+This is a construction plan, not yet the executable baseline itself.
 
 ## Legacy/remnant classification
 
@@ -75,6 +95,7 @@ Foundation Commit remains BLOCKED until the complete executable baseline is asse
 - functions and body dependencies
 - triggers and trigger functions
 - storage/project-owned schema where applicable
+- explicit review of all contract conflicts/overlaps
 
 Only after that gate may Empty DB Replay #2 begin.
 
