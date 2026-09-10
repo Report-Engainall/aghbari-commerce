@@ -14,12 +14,14 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="${1:-$ROOT/supabase/canonical_baseline.sql}"
 EMITTER="$ROOT/supabase/tools/emit_canonical_baseline.sql"
+RUNTIME="$ROOT/supabase/tools/emit_canonical_runtime.sql"
 TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
+RUNTIME_TMP="$(mktemp)"
+trap 'rm -f "$TMP" "$RUNTIME_TMP"' EXIT
 
-# pg_dump is preferred because PostgreSQL itself emits dependency-aware DDL.
-# The catalog emitter is retained as the parity/audit companion and catches
-# Supabase-specific publication/RLS/ACL/runtime metadata.
+# PostgreSQL emits dependency-aware DDL for the complete public schema:
+# tables, columns/defaults/generated/identity, types, constraints, indexes,
+# functions, triggers and RLS policies. No owner/privilege statements are emitted here.
 pg_dump "$DB_URL" \
   --schema-only \
   --schema=public \
@@ -27,13 +29,18 @@ pg_dump "$DB_URL" \
   --no-privileges \
   --file="$TMP"
 
+# Supabase runtime metadata not guaranteed by pg_dump is emitted separately:
+# Realtime publication membership, RLS enablement, and explicit ACL grants.
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$RUNTIME" > "$RUNTIME_TMP"
+
 {
-  printf '%s\n' '-- CANONICAL BASELINE: pg_dump public schema, no owner/no privileges';
-  printf '%s\n' '-- Source is the canonical live database; generated locally from a read-only connection.';
+  printf '%s\n' '-- CANONICAL BASELINE: canonical live PostgreSQL public schema';
+  printf '%s\n' '-- Generated from a read-only source connection; no source DDL is executed.';
   cat "$TMP";
-  printf '%s\n' '' '-- END PG_DUMP CORE';
+  printf '%s\n' '' '-- CANONICAL SUPABASE RUNTIME OVERLAY';
+  cat "$RUNTIME_TMP";
+  printf '%s\n' '' '-- END CANONICAL BASELINE';
 } > "$OUT"
 
 printf 'Canonical baseline written to: %s\n' "$OUT"
-printf 'Run the committed emitter separately for Supabase-specific parity metadata:\n'
-printf '  psql "$DB_URL" -v ON_ERROR_STOP=1 -f "%s" > "%s.emitter.sql"\n' "$EMITTER" "$OUT"
+printf 'Source parity emitter remains available at: %s\n' "$EMITTER"
