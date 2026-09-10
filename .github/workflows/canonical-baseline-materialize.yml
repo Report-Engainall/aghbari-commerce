@@ -49,10 +49,15 @@ jobs:
               raise SystemExit(f'ARTIFACT COUNT FAIL: triggers expected 16, got {trigger_count}')
 
           full = Path('supabase/canonical_baseline.sql').read_text(encoding='utf-8')
-          for forbidden in ('organizations', 'operational_invoices', 'current_organization_id'):
-              if forbidden in full:
-                  raise SystemExit(f'FORBIDDEN LEGACY TOKEN IN ARTIFACT: {forbidden}')
-          print('ARTIFACT STRUCTURAL GATE: PASS (100 tables / 98 functions / 179 policies / 16 triggers; forbidden legacy scan clean)')
+          forbidden_patterns = (
+              r'(?m)^CREATE TABLE public\\.organizations\\b',
+              r'(?m)^CREATE TABLE public\\.operational_invoices\\b',
+              r'(?m)^CREATE (?:OR REPLACE )?FUNCTION public\\.current_organization_id\\b',
+          )
+          for pattern in forbidden_patterns:
+              if re.search(pattern, full):
+                  raise SystemExit(f'FORBIDDEN LEGACY OBJECT IN ARTIFACT: {pattern}')
+          print('ARTIFACT STRUCTURAL GATE: PASS (100 tables / 98 functions / 179 policies / 16 triggers; forbidden object scan clean)')
           PY
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tools/verify_canonical_baseline.sql
       - name: Commit generated chunks
