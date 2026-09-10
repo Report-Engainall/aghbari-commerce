@@ -11,13 +11,12 @@ insert into public.company_memberships (id,company_id,user_id,role,is_active,is_
 values ('12121212-1212-4121-8121-121212121214','12121212-1212-4121-8121-121212121213','12121212-1212-4121-8121-121212121212','admin',true,true);
 insert into public.branches (id,company_id,name)
 values ('12121212-1212-4121-8121-121212121215','12121212-1212-4121-8121-121212121213','Finance Branch');
+insert into public.warehouses (id,company_id,branch_id,name)
+values ('12121212-1212-4121-8121-121212121219','12121212-1212-4121-8121-121212121213','12121212-1212-4121-8121-121212121215','Finance Warehouse');
 insert into public.customers (id,company_id,name,email)
 values ('12121212-1212-4121-8121-121212121216','12121212-1212-4121-8121-121212121213','Finance Customer','finance-flow@test.local');
 insert into public.orders (id,company_id,customer_id,warehouse_id,order_number,status,total,currency,idempotency_key,created_by)
-select '12121212-1212-4121-8121-121212121217',c.company_id,c.id,w.id,9121201,'completed',200,'YER','finance-flow-01','12121212-1212-4121-8121-121212121212'
-from public.customers c join public.warehouses w on w.company_id=c.company_id
-where c.id='12121212-1212-4121-8121-121212121216' limit 1;
-
+values ('12121212-1212-4121-8121-121212121217','12121212-1212-4121-8121-121212121213','12121212-1212-4121-8121-121212121216','12121212-1212-4121-8121-121212121219',9121201,'completed',200,'YER','finance-flow-01','12121212-1212-4121-8121-121212121212');
 insert into public.cash_accounts(id,company_id,branch_id,name,currency,opening_balance)
 values ('12121212-1212-4121-8121-121212121218','12121212-1212-4121-8121-121212121213','12121212-1212-4121-8121-121212121215','Flow Cash','YER',0);
 
