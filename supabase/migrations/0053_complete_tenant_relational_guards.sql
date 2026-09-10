@@ -41,10 +41,6 @@ BEGIN
     ALTER TABLE public.products ADD CONSTRAINT products_category_company_fk
       FOREIGN KEY (category_id, company_id) REFERENCES public.categories (id, company_id) ON DELETE RESTRICT;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.profiles'::regclass AND conname='profiles_customer_company_fk') THEN
-    ALTER TABLE public.profiles ADD CONSTRAINT profiles_customer_company_fk
-      FOREIGN KEY (customer_id, company_id) REFERENCES public.customers (id, company_id) ON DELETE RESTRICT;
-  END IF;
 END $$;
 
 -- Storage policy is deliberately fail-closed and scoped to the current company/product.
@@ -103,4 +99,3 @@ USING (
 COMMENT ON CONSTRAINT warehouses_branch_company_fk ON public.warehouses IS 'Warehouse branch must belong to the same company as the warehouse.';
 COMMENT ON CONSTRAINT categories_parent_company_fk ON public.categories IS 'Category hierarchy cannot reference a parent from another company.';
 COMMENT ON CONSTRAINT products_category_company_fk ON public.products IS 'Product category must belong to the same company as the product.';
-COMMENT ON CONSTRAINT profiles_customer_company_fk ON public.profiles IS 'Authenticated profile cannot bind to a customer from another company.';
