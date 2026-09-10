@@ -33,7 +33,7 @@ as $$
     coalesce((select sum(o.total) from public.orders o, org where o.organization_id = org.organization_id and o.status = 'completed'), 0),
     (select count(*) from public.customers c, org where c.organization_id = org.organization_id and c.is_active),
     (select count(*) from public.products p, org where p.organization_id = org.organization_id and p.status = 'active'),
-    coalesce((select sum(ib.available_quantity) from public.inventory_balances ib, org where ib.organization_id = org.organization_id), 0),
+    coalesce((select sum(ib.quantity) from public.inventory_balances ib, org where ib.organization_id = org.organization_id), 0),
     coalesce((select sum(i.total) from public.operational_invoices i, org where i.organization_id = org.organization_id and i.status = 'issued'), 0);
 $$;
 
