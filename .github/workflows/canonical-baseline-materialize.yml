@@ -6,7 +6,7 @@ on:
       - 'supabase/tools/export_canonical_baseline.sh'
       - 'supabase/tools/emit_canonical_runtime.sql'
       - 'supabase/tools/verify_canonical_baseline.sql'
-      - 'supabase/canonical/**'
+      - '.github/workflows/canonical-baseline-materialize.yml'
   workflow_dispatch:
 jobs:
   materialize:
