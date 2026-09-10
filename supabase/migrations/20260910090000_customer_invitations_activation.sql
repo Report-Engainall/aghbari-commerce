@@ -18,7 +18,6 @@ alter table public.customer_invitations enable row level security;
 drop policy if exists customer_invitations_staff_select on public.customer_invitations;
 create policy customer_invitations_staff_select on public.customer_invitations for select to authenticated using (company_id=public.current_company_id() and exists(select 1 from public.company_memberships cm where cm.company_id=customer_invitations.company_id and cm.user_id=auth.uid() and cm.is_active and cm.role in ('owner','admin','sales')));
 
-authorize;
 create or replace function public.create_customer_invitation(p_customer_id uuid,p_email text,p_expires_hours integer default 72)
 returns jsonb language plpgsql security definer set search_path=public,pg_catalog as $$
 declare v_company uuid; v_token text; v_id uuid; v_expires timestamptz; v_email text;
