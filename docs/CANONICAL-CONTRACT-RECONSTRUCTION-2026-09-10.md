@@ -48,6 +48,23 @@ Observed executable-looking dependency chains include:
 
 The dependency graph has a large common authority root at `current_company_id()` plus a separate customer authority root at `current_customer_company_id()` / `current_customer_id()`. This means helper functions must be created before their dependents, while mutually recursive or ambiguous textual references must be reviewed rather than blindly topologically sorted.
 
+## RLS contract ordering findings
+
+Live RLS extraction confirms the expected security dependency direction:
+
+`companies / memberships → current_company_id() → tenant RLS policies → domain tables`
+
+Customer-facing policies add a second authority chain:
+
+`profiles → current_customer_id() / current_customer_company_id() → customer RLS policies → carts/orders/credit/pricing/templates`
+
+Several child-table policies deliberately re-check parent tenant ownership through `EXISTS`, including cart items, order items, purchase items, sale items, import rows/job rows, decision work items/action receipts, and alternative-item group members. These parent checks are part of the canonical security contract and must not be simplified away in the baseline.
+
+Two additional observations are recorded for baseline review:
+
+1. `alternative_item_groups` and `alternative_item_group_members` currently have RLS policies addressed to the `public` role rather than only `authenticated`. Their predicates still require `current_company_id()`, so this is not by itself evidence of anonymous tenant access; however, it is an unnecessarily broad privilege/policy surface and must be preserved as Live Truth for replay, then reviewed as a controlled hardening candidate rather than silently changed during reconstruction.
+2. `synonym_dictionary` has an authenticated SELECT policy with `USING (true)`. This appears intentionally global rather than tenant-scoped, but it must be explicitly classified as a global reference-data contract before the baseline is frozen.
+
 ## Proposed executable creation tiers
 
 1. Extensions, schemas, base types and sequences.
