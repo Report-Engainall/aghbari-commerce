@@ -31,26 +31,33 @@
 - Added authenticated order detail retrieval from `orders`, `order_items`, and `order_status_history`; access remains subject to the existing customer/organization RLS policies.
 - Added input-contract tests for cart batch updates and order-detail identifiers.
 
-### Verification status
-- The branch remains unmerged and Production remains untouched.
-- The Vercel provider status for the branch commits remains a deployment-rate-limit failure; this is not treated as an application build result.
-- No automated PASS is asserted until a real TypeScript/test/lint/build runner completes.
-
 ## 2026-09-11 — Admin customer-flow follow-through
 
 - Added real customer editing through the existing server RPC `update_customer`; no client-only mutation is used.
-- Added customer search across name/phone/email.
-- Added active/inactive filtering.
-- Added deterministic client-side pagination for the retrieved customer set.
-- Added edit validation for name/phone/tier at the service boundary and verified the existing server RPC remains the mutation authority.
+- Added customer search across name/phone/email, active/inactive filtering, and deterministic pagination.
 - Added service-level tests covering valid normalization, blank-name rejection, oversized-phone rejection, and invalid-tier rejection.
 
-### Current verification evidence
-- Branch head after implementation/test additions: `af2b20d8a8c6bb2e9db56ae7e3a5bdc8466584e5`.
-- GitHub Actions has started on this exact SHA; the observed `supabase-migration-proof` run is queued and is not yet a PASS.
-- An `Order Workflow Proof` run for the immediately preceding SHA `809139512faaa77db84aa3f4e5fa48fcafa7da8a` reached `in_progress`; no PASS is claimed before completion.
-- No local runner evidence is claimed because the execution environment cannot reach GitHub/npm to reproduce the repository install.
-- Production remains untouched.
+## 2026-09-11 — Admin catalog / inventory / purchasing hardening
+
+- Admin product lifecycle now exposes real DB-backed product records with edit, activate/deactivate, search, status filter, pagination, category selection, and tier pricing through existing server-authoritative RPCs.
+- Admin order operations now expose search/filter/pagination while retaining server-authoritative state transitions.
+- Corrected an AdminPanel product query from obsolete `is_active` to the current schema field `status`.
+- Inventory service contracts now reject fractional, unsafe, negative, or oversized quantities before RPC execution; inventory threshold and transfer validation remain server-authoritative after client validation.
+- Added adversarial unit coverage for inventory transfer/threshold inputs and purchasing order/receiving inputs.
+- Purchasing remains wired to real supplier, purchase-order, approval, and receiving RPCs; no mock persistence was introduced.
+- Existing order concurrency hardening remains present through deterministic locking and idempotency at the database command layer.
+
+### Exact implementation lineage
+- Prior DAY 2 implementation head: `1526ecca26450c2a08a09e13095cc19759c12bd2`.
+- Inventory hardening commit: `f68707a8f3e2931bdee1faf77783872149b631a8`.
+- Inventory adversarial tests commit: `40dfeaf9348652d456dd8c552b7d5f74381a21a0`.
+- Purchasing adversarial tests commit: `ea4a3a7a89941720472a00fd49839c6b7eac7f21`.
+- Latest evidence-log update follows those implementation commits.
+
+### Verification status
+- CI is monitored by exact SHA; no PASS is claimed until the runner completes successfully for the exact target SHA.
+- No Production modification or promotion was performed.
+- Vercel capacity/rate limiting remains an external deployment blocker and is not treated as a code/build PASS.
 
 ## Next execution front
-Admin product/category business-flow closure → order operational detail/search/filter/pagination audit → finance/inventory/purchasing mutation audit → adversarial authorization/concurrency tests → Clean Replay/Test 021 → authenticated browser E2E across Chrome/Edge/Firefox/mobile.
+Admin finance/inventory/purchasing edge-flow audit → refund/cancellation/payment consistency → adversarial authorization and concurrency proof → Clean Replay/Test 021 → authenticated browser E2E across Chrome/Edge/Firefox/mobile → regression/gap rescan → final evidence pack.
