@@ -12,60 +12,53 @@
 - Excel Quick Order: XLSX upload, parsing, header validation, SKU/name matching through the authorized catalog, quantity/duplicate/availability diagnostics, review UI, and atomic `set_cart_items` persistence.
 - Added cart batch service wrapper around the existing server-authoritative `set_cart_items` RPC.
 
-### Security / persistence verification performed
-- Confirmed the live database contains the required portal/order/finance tables.
-- Confirmed customer RLS exists for `order_templates`, `operational_invoices`, `operational_invoice_items`, `payments`, `customer_credit_accounts`, `customer_ledger_entries`, `orders`, `order_items`, and `order_status_history`.
-- Confirmed customer order history and invoice/item policies are scoped to the authenticated organization/customer context.
-- Confirmed `set_cart_items` is server-authoritative, validates 1–200 items, validates quantities, rejects duplicate products, requires the authenticated customer context, and checks active products in the caller organization.
-- Confirmed `get_catalog` scopes products to the authenticated organization/customer and supports SKU/barcode/name search.
+## 2026-09-11 — Admin / operations follow-through
 
-### Verification status
-- Source implementation committed on branch `day2/complete-product`.
-- Automated TypeScript/test/lint/build evidence is **NOT claimed here** until an actual runner completes it.
-- Vercel deployment evidence is **NOT claimed**; provider rate limiting is not treated as application success.
-- Production was not modified by these DAY 2 commits.
+- Added real customer editing through `update_customer`, customer search, active/inactive filtering, and deterministic pagination.
+- Admin catalog exposes real product/category/price operations through server-authoritative RPCs.
+- Admin order operations retain server-authoritative workflow transitions with search/filter/pagination.
+- Corrected the AdminPanel product query from obsolete `is_active` to the current `status` field.
+- Inventory and purchasing input contracts reject unsafe quantities, malformed identifiers, duplicate lines, invalid thresholds, and invalid idempotency inputs before RPC execution.
+- Existing database concurrency hardening remains in force for order creation and stock locking.
 
-## 2026-09-11 — Dashboard/detail follow-through
+## 2026-09-11 — Finance + schema alignment
 
-- Added a customer dashboard summary driven by the authenticated `getCustomerOrders(20)` read model; it does not use placeholder order data.
-- Added authenticated order detail retrieval from `orders`, `order_items`, and `order_status_history`; access remains subject to the existing customer/organization RLS policies.
-- Added input-contract tests for cart batch updates and order-detail identifiers.
+- Finance service-level adversarial coverage exists for payment, cash-account, and expense inputs.
+- Finance operations use the operational finance RPCs: `create_cash_account`, `create_invoice_from_order`, `record_payment`, and `record_expense`.
+- Corrected `getInvoices()` to read `operational_invoices` rather than the obsolete `sales_invoices` surface.
+- `paid_amount` is now derived from RLS-protected `payments` rows, while the authoritative payment command still enforces invoice-balance and currency consistency on the server.
+- No client-only financial mutation or mock persistence was introduced.
 
-## 2026-09-11 — Admin customer-flow follow-through
+## 2026-09-11 — Adversarial / compiler closure
 
-- Added real customer editing through the existing server RPC `update_customer`; no client-only mutation is used.
-- Added customer search across name/phone/email, active/inactive filtering, and deterministic pagination.
-- Added service-level tests covering valid normalization, blank-name rejection, oversized-phone rejection, and invalid-tier rejection.
-
-## 2026-09-11 — Admin catalog / inventory / purchasing hardening
-
-- Admin product lifecycle exposes real DB-backed product records with edit, activate/deactivate, search, status filter, pagination, category selection, and tier pricing through existing server-authoritative RPCs.
-- Admin order operations expose search/filter/pagination while retaining server-authoritative state transitions.
-- Corrected an AdminPanel product query from obsolete `is_active` to the current schema field `status`.
-- Inventory service contracts reject fractional, unsafe, negative, or oversized quantities before RPC execution; inventory threshold and transfer validation remain server-authoritative after client validation.
-- Purchasing remains wired to real supplier, purchase-order, approval, and receiving RPCs; no mock persistence was introduced.
-- Existing order concurrency hardening remains present through deterministic locking and idempotency at the database command layer.
-
-## 2026-09-11 — Finance + adversarial contract execution
-
-- Added finance service-level adversarial coverage for payment, cash-account, and expense input contracts.
-- Added cross-domain adversarial coverage for inventory transfer/threshold validation, purchase-order/receiving batches, and malformed staff-order responses.
-- The new tests explicitly exercise malformed UUIDs, zero/negative/non-finite amounts, unsupported payment methods/currencies, duplicate lines, fractional quantities, invalid threshold relationships, short idempotency keys, and malformed order response shapes.
-- Finance operations remain backed by the existing server RPCs (`create_cash_account`, `create_invoice_from_order`, `record_payment`, `record_expense`); no client-only financial mutation was introduced.
-- Corrected the finance service read path to the actual `operational_invoices` schema and derived `paid_amount` from RLS-protected `payments` rows instead of querying the obsolete `sales_invoices` surface.
-- The finance DB command already enforces invoice-balance and cash-account-currency consistency server-side; no client-only financial authority was added.
+- Prior exact-SHA Quality runner failed at TypeScript before unit tests. Root cause was captured from the actual runner: a `getOrderTemplates` resolution failure in `CustomerCommerceHub.tsx` and an implicit-`any` invoice mapper parameter in `customerPortal.ts`.
+- The customer portal mapper was hardened with an explicit `CustomerInvoiceRow` boundary so strict TypeScript does not depend on generated Supabase inference.
+- The customer template E2E now explicitly covers create → DB persistence → reload → template remains → apply to real cart.
+- Browser certification configuration was expanded from Chromium-only to Chrome, Edge, Firefox, and mobile Chrome (`Pixel 5`).
+- Runtime E2E workflow now installs all required browsers and executes the complete Playwright project matrix.
 
 ### Exact implementation lineage
-- Starting DAY 2 reference supplied by owner: `d1cf83a170a08b65a1f83c7e9fea62e7782bc01b`.
-- Current executable branch: `day2/complete-product`.
-- Current branch head: `58e27e3d5eeec27fb7b977685d27a2f92cc7a718`.
-- Finance service schema-alignment commit: `58e27e3d5eeec27fb7b977685d27a2f92cc7a718`.
+- Owner-supplied DAY 2 reference: `d1cf83a170a08b65a1f83c7e9fea62e7782bc01b`.
+- Executable branch: `day2/complete-product`.
+- Finance schema alignment: `58e27e3d5eeec27fb7b977685d27a2f92cc7a718`.
+- Customer portal strict-typing repair: `2a3daa5db60db71381cbc30c2448626eb25d8925`.
+- Browser matrix hardening: `eb2d08070e568a2d74cf4834824214ecc41021f6` and `4316b608d2a85b8c06590ecad9b2f8be047fed18`.
+- Authenticated order-template E2E coverage: `7281a66e800c3100c34c91662755d7dd477b9fa6`.
+- Current evidence-log update follows the latest implementation commits.
 
 ### Verification status
-- The GitHub status observed on prior exact SHAs contained Vercel deployment rate-limit failures; these are external provider statuses and are not treated as application build/test failures.
-- No automated PASS is claimed for the latest change until an actual runner reports success on that exact SHA.
-- Supabase security evidence remains subject to the current database state; no security warning is silently converted to PASS.
-- Production was not modified or promoted by this DAY 2 work.
+- Exact SHA checkout and HEAD verification passed on the earlier `58e27e3...` Quality run, proving the runner tested the intended SHA; TypeScript then failed before later gates. That failure is not being hidden or converted to PASS.
+- A subsequent workflow run for `2a3daa5...` was observed in progress at the time of inspection; no PASS is claimed until its completed result is retrieved.
+- Order Workflow Proof previously completed successfully on its exact tested SHA.
+- Security audit previously completed successfully on its exact tested SHA; this is not transferred as certification for newer SHAs.
+- Vercel/Production status is not treated as build or runtime evidence until the exact current SHA is deployed and externally verified.
+- Production and `main` were not modified or promoted by these DAY 2 commits.
 
-## Next execution front
-Finance mutation consistency → cancellation/refund capability against the actual DB contract → concurrency/idempotency adversarial proof → Clean Replay/Test 021 → authenticated browser E2E across Chrome/Edge/Firefox/mobile → regression/gap rescan → final evidence pack and certification gates.
+## Remaining execution gates
+- Retrieve completed CI results for the newest exact SHA and repair any newly exposed root causes.
+- Clean Replay + Test 021 on the final candidate SHA.
+- Security adversarial runtime proof and concurrency proof.
+- Authenticated browser E2E on Chrome, Edge, Firefox, and mobile Chrome against the exact deployed SHA.
+- Regression and gap rescan.
+- Production SHA lineage and runtime proof.
+- Final evidence pack and Final Production Certification only after every required gate is actually proven.
