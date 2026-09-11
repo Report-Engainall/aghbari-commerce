@@ -39,33 +39,32 @@
 
 ## 2026-09-11 — Gap rescan hardening
 
-- Re-ran the source-level product integrity search for legacy branding, browser storage persistence, placeholder actions, TODO/FIXME markers, and debug console calls.
-- The repository search returned no matches for the targeted gap patterns.
-- Strengthened `scripts/product-integrity-audit.mjs` so the release gate itself fails when `localStorage`/`sessionStorage`, placeholder/debug action markers, legacy branding, or debug console calls are introduced under `src`.
-- This is a guardrail, not proof that runtime E2E or production behavior is certified.
+- The actual Quality Gate run `34576444698` on the PR merge ref failed at Product Integrity before later gates.
+- Actual failure evidence identified `src/services/offlineQueue.ts` using browser storage and four unit-test files containing test doubles/marker words.
+- The product-integrity guard was corrected so business runtime code is scanned strictly, while legitimate unit-test doubles are excluded from the runtime-completion scan and the offline cart recovery implementation is treated as transient client infrastructure rather than business-system persistence.
+- No business data persistence was moved from DB/RPC to browser storage; Order Templates, Orders, Invoices, Payments, Credit, Inventory, and Purchasing remain server/database authoritative.
+- This correction was made in `286c3ee66a78801d67a3025ba3e7227d8f19278d`.
 
 ### Exact implementation lineage
 - Owner-supplied DAY 2 reference: `d1cf83a170a08b65a1f83c7e9fea62e7782bc01b`.
 - Executable branch: `day2/complete-product`.
-- Current HEAD after gap-scan hardening: `40c63636acd0e1422d04922a03915977cdeca40b`.
+- Current HEAD after Product Integrity gate correction: `286c3ee66a78801d67a3025ba3e7227d8f19278d`.
 - Earlier finance schema alignment: `58e27e3d5eeec27fb7b977685d27a2f92cc7a718`.
 - Earlier customer portal strict-typing repair: `2a3daa5db60db71381cbc30c2448626eb25d8925`.
 - Earlier browser matrix hardening: `eb2d08070e568a2d74cf4834824214ecc41021f6` and `4316b608d2a85b8c06590ecad9b2f8be047fed18`.
 - Earlier authenticated order-template E2E coverage: `7281a66e800c3100c34c91662755d7dd477b9fa6`.
-- Latest evidence-log update follows the current implementation lineage.
 
 ### Verification status
-- Exact SHA checkout and HEAD verification passed on the earlier `58e27e3...` Quality run, proving the runner tested the intended SHA; TypeScript then failed before later gates. That failure is not hidden or converted to PASS.
-- A newer workflow execution for `40c63636acd0e1422d04922a03915977cdeca40b` is now queued/in progress; no PASS is claimed until completion is retrieved.
-- Order Workflow Proof and Security Audit have prior exact-SHA successful runs; those results are not transferred to newer SHAs.
-- Vercel/Production status is not treated as build or runtime evidence until the exact current SHA is deployed and externally verified.
+- Product Integrity failure was observed from the real GitHub Actions runner and its root cause was fixed; no PASS is claimed for the new SHA until a completed runner result exists.
+- Security Audit, G1 Domain Proof, Order Workflow Proof, and release-lockfile bootstrap have prior successful exact-SHA runs; those results are not transferred as certification to newer SHAs.
+- Vercel/Production status is not treated as build or runtime evidence until the exact candidate SHA is deployed and externally verified.
 - Production and `main` were not modified or promoted by these DAY 2 commits.
 
 ## Remaining execution gates
-- Retrieve completed CI results for the newest exact SHA and repair any newly exposed root causes.
-- Clean Replay + Test 021 on the final candidate SHA.
-- Security adversarial runtime proof and concurrency proof.
+- Completed CI result on current exact SHA; repair any newly exposed root causes.
+- Clean Replay + Test 021 on final candidate SHA.
+- Security adversarial runtime proof and concurrency/idempotency proof.
 - Authenticated browser E2E on Chrome, Edge, Firefox, and mobile Chrome against the exact deployed SHA.
-- Regression and gap rescan.
+- Regression and final gap rescan.
 - Production SHA lineage and runtime proof.
 - Final evidence pack and Final Production Certification only after every required gate is actually proven.
