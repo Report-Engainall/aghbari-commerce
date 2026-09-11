@@ -25,5 +25,16 @@
 - Vercel deployment evidence is **NOT claimed**; the provider status currently reports deployment rate limiting.
 - Production was not modified by these DAY 2 commits.
 
+## 2026-09-11 — Dashboard/detail follow-through
+
+- Added a customer dashboard summary driven by the authenticated `getCustomerOrders(20)` read model; it does not use placeholder order data.
+- Added authenticated order detail retrieval from `orders`, `order_items`, and `order_status_history`; access remains subject to the existing customer/organization RLS policies.
+- Added input-contract tests for cart batch updates and order-detail identifiers.
+
+### Verification status
+- The branch remains unmerged and Production remains untouched.
+- The Vercel provider status for the branch commits remains a deployment-rate-limit failure; this is not treated as an application build result.
+- No automated PASS is asserted until a real TypeScript/test/lint/build runner completes.
+
 ## Next execution front
 Admin business-flow gap scan → remaining real mutations/exports/search/filter/pagination gaps → adversarial tests → Clean Replay/Test 021 → authenticated browser E2E.
