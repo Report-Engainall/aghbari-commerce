@@ -12,7 +12,7 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
@@ -25,15 +25,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install dependencies from lockfile
+        run: npm ci --no-audit --no-fund
 
       - name: Product integrity audit
         run: npm run test:product-integrity
 
       - name: Architecture audit
         run: npm run test:architecture
+
+      - name: Order invariants
+        run: npm run test:order-invariants
 
       - name: Typecheck
         run: npm run typecheck
@@ -50,6 +54,6 @@ jobs:
       - name: Release audit
         run: npm run test:release-audit
 
-      - name: E2E suite (when runtime credentials and base URL are available)
+      - name: E2E suite (runtime credentials required)
         if: ${{ env.VITE_SUPABASE_URL != '' && env.VITE_SUPABASE_PUBLISHABLE_KEY != '' && env.E2E_BASE_URL != '' }}
         run: npm run test:e2e
