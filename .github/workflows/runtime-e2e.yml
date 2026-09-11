@@ -23,7 +23,7 @@ jobs:
   runtime-e2e:
     name: Authenticated browser critical path
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       E2E_BASE_URL: ${{ inputs.base_url }}
       E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
@@ -58,8 +58,8 @@ jobs:
           cache: npm
       - name: Install dependencies from lockfile
         run: npm ci --no-audit --no-fund
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Chrome, Edge and Firefox
+        run: npx playwright install --with-deps chromium msedge firefox
       - name: Require runtime credentials
         shell: bash
         run: |
@@ -68,7 +68,7 @@ jobs:
           test -n "$E2E_PASSWORD"
           test -n "$E2E_EMAIL_B"
           test -n "$E2E_PASSWORD_B"
-      - name: Execute authenticated E2E
+      - name: Execute authenticated E2E matrix
         run: npm run test:e2e -- --reporter=list
       - name: Upload Playwright evidence
         if: always()

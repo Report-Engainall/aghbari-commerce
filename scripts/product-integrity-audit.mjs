@@ -8,9 +8,6 @@ const required = [
   'src/domain/order.ts', 'src/domain/pricing.ts', 'src/domain/import.ts', 'src/domain/businessIntelligence.ts', 'src/AppErrorBoundary.tsx'
 ];
 
-// Migration filenames are versioned artifacts, not semantic feature IDs. The
-// original 003x names were deduplicated/re-sequenced; validate the current
-// canonical versions that are also recorded in Supabase migration history.
 const requiredMigrationPatterns = [
   /^20260909005534_.*\.sql$/,
   /^20260909005546_.*\.sql$/,
@@ -39,15 +36,29 @@ function walk(dir) {
 walk(path.join(root, 'src'));
 
 const forbiddenBrand = /العامري|عامري|Alamri|alamri/i;
+// Offline cart recovery is intentionally client-side transient infrastructure; it is not
+// the system of record for orders/templates/invoices/etc. Business persistence must use DB/RPC.
+const legacyRuntime = /\b(?:localStorage|sessionStorage)\s*\./;
+// Unit-test doubles are allowed in tests; product runtime must not contain fake actions.
+const placeholderActions = /\b(?:TODO|FIXME)\b|alert\s*\(|(?:mock|fake data|placeholder action)/i;
 const forbiddenMatches = [];
+const runtimeStorageMatches = [];
+const placeholderMatches = [];
 const debugMatches = [];
 for (const file of sourceFiles) {
   const text = fs.readFileSync(file, 'utf8');
-  if (forbiddenBrand.test(text)) forbiddenMatches.push(path.relative(root, file));
-  if (/console\.(log|debug)\s*\(/.test(text)) debugMatches.push(path.relative(root, file));
+  const relative = path.relative(root, file);
+  const isTestFile = /(?:^|[./])[^/]+\.test\.[jt]sx?$/.test(relative);
+  const isOfflineQueue = relative === 'src/services/offlineQueue.ts';
+  if (forbiddenBrand.test(text)) forbiddenMatches.push(relative);
+  if (!isTestFile && !isOfflineQueue && legacyRuntime.test(text)) runtimeStorageMatches.push(relative);
+  if (!isTestFile && placeholderActions.test(text)) placeholderMatches.push(relative);
+  if (!isTestFile && /console\.(log|debug)\s*\(/.test(text)) debugMatches.push(relative);
 }
 if (forbiddenMatches.length) failures.push(`Legacy branding found in source: ${forbiddenMatches.join(', ')}`);
-if (debugMatches.length) failures.push(`Debug console calls found in source: ${debugMatches.join(', ')}`);
+if (runtimeStorageMatches.length) failures.push(`Browser storage persistence found in product runtime: ${runtimeStorageMatches.join(', ')}`);
+if (placeholderMatches.length) failures.push(`Placeholder/debug action markers found in product runtime: ${placeholderMatches.join(', ')}`);
+if (debugMatches.length) failures.push(`Debug console calls found in product runtime: ${debugMatches.join(', ')}`);
 
 const envExamplePath = path.join(root, '.env.example');
 if (!fs.existsSync(envExamplePath)) failures.push('Missing environment contract: .env.example');

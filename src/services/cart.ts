@@ -18,5 +18,21 @@ async function replayCartOperation(operation: OfflineOperation): Promise<void> {
 export async function syncOfflineCart() { const userId = await currentUserId(); return drainOfflineOperations(replayCartOperation, userId); }
 export async function getCart() { const { data, error } = await requireSupabase().rpc('get_cart'); if (error) throw error; if (!Array.isArray(data)) throw new Error('استجابة السلة غير صالحة.'); return data.map(assertCartItem); }
 export async function setCartItem(productId: string, quantity: number) { if (!productId) throw new Error('المنتج مطلوب.'); if (!UUID_PATTERN.test(productId.trim())) throw new Error('معرّف المنتج غير صالح.'); if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_ORDER_QUANTITY_PER_LINE) throw new Error(`الكمية يجب أن تكون بين 1 و${MAX_ORDER_QUANTITY_PER_LINE}.`); if (typeof navigator !== 'undefined' && navigator.onLine === false) { await enqueueOfflineOperation(await currentUserId(), OFFLINE_CART_SET_ITEM, { productId: productId.trim(), quantity }); return; } const { error } = await requireSupabase().rpc('set_cart_item', { p_product_id: productId.trim(), p_quantity: quantity }); if (error) throw error; }
+export async function setCartItems(items: Array<{ productId: string; quantity: number }>) {
+  if (!Array.isArray(items) || items.length < 1 || items.length > 200) throw new Error('يجب تحديد من 1 إلى 200 صنف.');
+  const seen = new Set<string>();
+  const payload = items.map((item) => {
+    if (!item || !UUID_PATTERN.test(item.productId?.trim() ?? '')) throw new Error('معرّف منتج غير صالح.');
+    if (seen.has(item.productId)) throw new Error('لا يمكن تكرار المنتج في عملية السلة الجماعية.');
+    seen.add(item.productId);
+    if (!Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > MAX_ORDER_QUANTITY_PER_LINE) throw new Error(`الكمية يجب أن تكون بين 1 و${MAX_ORDER_QUANTITY_PER_LINE}.`);
+    return { product_id: item.productId.trim(), quantity: item.quantity };
+  });
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('الطلب السريع من Excel يحتاج اتصالًا بالخادم.');
+  const { data, error } = await requireSupabase().rpc('set_cart_items', { p_items: payload });
+  if (error) throw error;
+  if (!Array.isArray(data)) throw new Error('استجابة السلة الجماعية غير صالحة.');
+  return data.map(assertCartItem);
+}
 export async function removeCartItem(productId: string) { if (!productId) throw new Error('المنتج مطلوب.'); if (!UUID_PATTERN.test(productId.trim())) throw new Error('معرّف المنتج غير صالح.'); if (typeof navigator !== 'undefined' && navigator.onLine === false) { await enqueueOfflineOperation(await currentUserId(), OFFLINE_CART_REMOVE_ITEM, { productId: productId.trim() }); return; } const { error } = await requireSupabase().rpc('remove_cart_item', { p_product_id: productId.trim() }); if (error) throw error; }
 export async function clearCart() { const { error } = await requireSupabase().rpc('clear_cart'); if (error) throw error; }

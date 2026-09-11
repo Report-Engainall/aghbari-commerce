@@ -1,7 +1,7 @@
 import { requireSupabase } from '../lib/supabase';
 
-export type InvoiceStatus = 'confirmed' | 'partially_paid' | 'paid' | 'void' | 'cancelled';
-export interface OperationalInvoice { id: string; order_id: string | null; customer_id: string; invoice_number: string; status: InvoiceStatus; currency: string; subtotal: number; total: number; paid_amount: number; due_date: string | null; created_at: string; }
+export type InvoiceStatus = 'issued' | 'partially_paid' | 'paid' | 'void';
+export interface OperationalInvoice { id: string; order_id: string | null; customer_id: string; invoice_number: number; status: InvoiceStatus; currency: string; subtotal: number; total: number; paid_amount: number; due_at: string | null; created_at: string; }
 export interface CashBalance { id: string; name: string; currency: string; opening_balance: number; received: number; spent: number; current_balance: number; }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -34,7 +34,7 @@ export function validatePaymentInput(invoiceId: string, amount: number, method: 
   const normalizedMethod = requireString(method, 'طريقة الدفع').trim();
   if (!PAYMENT_METHODS.has(normalizedMethod)) throw new Error('طريقة الدفع غير مسموحة.');
   if (cashAccountId !== null) requireUuid(cashAccountId, 'حساب النقدية');
-  const normalizedReference = requireString(reference, 'مرجع الدفع');
+  const normalizedReference = requireString(reference, 'مرجع الدفع').trim();
   if (normalizedReference.length > 200) throw new Error('مرجع الدفع طويل جدًا.');
 }
 export function validateExpenseInput(branchId: string, cashAccountId: string, category: string, amount: number, currency: string, description: string): void {
@@ -42,7 +42,7 @@ export function validateExpenseInput(branchId: string, cashAccountId: string, ca
   const normalizedCategory = requireString(category, 'تصنيف المصروف').trim();
   if (!normalizedCategory || normalizedCategory.length > 200) throw new Error('تصنيف المصروف مطلوب وبحد أقصى 200 حرف.');
   requirePositiveAmount(amount, 'مبلغ المصروف'); requireCurrency(currency);
-  const normalizedDescription = requireString(description, 'وصف المصروف');
+  const normalizedDescription = requireString(description, 'وصف المصروف').trim();
   if (normalizedDescription.length > 2000) throw new Error('وصف المصروف طويل جدًا.');
 }
 export function validateCashAccountInput(branchId: string, name: string, currency: string, openingBalance: number): void {
@@ -55,9 +55,16 @@ export function validateCashAccountInput(branchId: string, name: string, currenc
 
 export async function getInvoices(limit = 100) {
   const normalizedLimit = Number.isSafeInteger(limit) ? Math.min(Math.max(limit, 1), 500) : 100;
-  const { data, error } = await requireSupabase().from('sales_invoices').select('id,order_id,customer_id,invoice_number,status,currency,subtotal,total,paid_amount,due_date,created_at').order('created_at', { ascending: false }).limit(normalizedLimit);
+  const { data, error } = await requireSupabase().from('operational_invoices').select('id,order_id,customer_id,invoice_number,status,currency,subtotal,total,due_at,created_at').order('created_at', { ascending: false }).limit(normalizedLimit);
   if (error) throw error;
-  return (data ?? []) as OperationalInvoice[];
+  const rows = (data ?? []) as Array<Omit<OperationalInvoice, 'paid_amount'> & { paid_amount?: number }>;
+  const invoiceIds = rows.map((row) => row.id);
+  if (!invoiceIds.length) return rows.map((row) => ({ ...row, paid_amount: 0 })) as OperationalInvoice[];
+  const { data: paymentRows, error: paymentError } = await requireSupabase().from('payments').select('invoice_id,amount').in('invoice_id', invoiceIds);
+  if (paymentError) throw paymentError;
+  const paidByInvoice = new Map<string, number>();
+  for (const row of paymentRows ?? []) paidByInvoice.set(row.invoice_id, (paidByInvoice.get(row.invoice_id) ?? 0) + Number(row.amount));
+  return rows.map((row) => ({ ...row, paid_amount: paidByInvoice.get(row.id) ?? 0 })) as OperationalInvoice[];
 }
 export async function getCashBalances() {
   const { data, error } = await requireSupabase().rpc('get_cash_account_balances');

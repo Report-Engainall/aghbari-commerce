@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      TARGET_SHA: ${{ inputs.exact_sha || github.sha }}
+      TARGET_SHA: ${{ inputs.exact_sha || github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Validate exact SHA input
         shell: bash
@@ -32,7 +32,7 @@ jobs:
       - name: Checkout exact target SHA
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.exact_sha || github.sha }}
+          ref: ${{ env.TARGET_SHA }}
           fetch-depth: 1
       - name: Verify exact target HEAD
         shell: bash

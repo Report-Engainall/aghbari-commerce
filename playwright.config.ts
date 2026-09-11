@@ -15,7 +15,11 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
-    ...devices['Desktop Chrome']
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }]
+  projects: [
+    { name: 'chrome', use: { ...devices['Desktop Chrome'] } },
+    { name: 'edge', use: { ...devices['Desktop Edge'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'mobile-chrome', use: { ...devices['Pixel 5'] } },
+  ],
 });
