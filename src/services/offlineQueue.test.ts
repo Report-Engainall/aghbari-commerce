@@ -91,7 +91,8 @@ describe('offline operation queue', () => {
       { operationId: crypto.randomUUID(), type: OFFLINE_CART_SET_ITEM, createdAt: new Date().toISOString(), attempts: 0, payload: { productId: PRODUCT_A, quantity: 1 } },
       { operationId: crypto.randomUUID(), userId: USER_A, type: OFFLINE_CART_SET_ITEM, createdAt: new Date().toISOString(), attempts: 0, payload: { productId: PRODUCT_A, quantity: 1 } }
     ]));
-    expect(pendingOfflineOperations(USER_A)).toHaveLength(0);
+    expect(pendingOfflineOperations(USER_A)).toHaveLength(1);
+    expect(pendingOfflineOperations(USER_A)[0].userId).toBe(USER_A);
   });
 
   it('keeps each authenticated user isolated in the local queue', () => {
@@ -107,7 +108,7 @@ describe('offline operation queue', () => {
   });
 
   it('enforces a payload size ceiling', () => {
-    expect(() => enqueueOfflineOperation(USER_A, OFFLINE_CART_SET_ITEM, { productId: PRODUCT_A, blob: 'x'.repeat(MAX_OFFLINE_PAYLOAD_BYTES) })).toThrow(/حجم بيانات/);
+    expect(() => enqueueOfflineOperation(USER_A, OFFLINE_CART_SET_ITEM, { productId: PRODUCT_A, quantity: 1, blob: 'x'.repeat(MAX_OFFLINE_PAYLOAD_BYTES) })).toThrow(/حجم بيانات/);
   });
 
   it('enforces a hard queue ceiling', () => {
@@ -148,8 +149,9 @@ describe('offline operation queue', () => {
   it('removes a successful operation even when the processor mutates the queue', async () => {
     const operation = enqueueOfflineOperation(USER_A, OFFLINE_CART_SET_ITEM, { productId: PRODUCT_A, quantity: 1 });
     const added = enqueueOfflineOperation(USER_A, OFFLINE_CART_REMOVE_ITEM, { productId: PRODUCT_B });
+    let processorCalls = 0;
     const result = await drainOfflineOperations(async () => {
-      enqueueOfflineOperation(USER_B, OFFLINE_CART_SET_ITEM, { productId: PRODUCT_B, quantity: 1 });
+      if (processorCalls++ === 0) enqueueOfflineOperation(USER_B, OFFLINE_CART_SET_ITEM, { productId: PRODUCT_B, quantity: 1 });
     }, USER_A, Date.now());
     expect(result).toEqual({ processed: 2, failed: 0 });
     expect(pendingOfflineOperations(USER_A)).toHaveLength(0);
