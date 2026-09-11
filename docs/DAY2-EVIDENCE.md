@@ -22,7 +22,7 @@
 ### Verification status
 - Source implementation committed on branch `day2/complete-product`.
 - Automated TypeScript/test/lint/build evidence is **NOT claimed here** until an actual runner completes it.
-- Vercel deployment evidence is **NOT claimed**; the provider status currently reports deployment rate limiting.
+- Vercel deployment evidence is **NOT claimed**; provider rate limiting is not treated as application success.
 - Production was not modified by these DAY 2 commits.
 
 ## 2026-09-11 — Dashboard/detail follow-through
@@ -52,20 +52,20 @@
 - Added cross-domain adversarial coverage for inventory transfer/threshold validation, purchase-order/receiving batches, and malformed staff-order responses.
 - The new tests explicitly exercise malformed UUIDs, zero/negative/non-finite amounts, unsupported payment methods/currencies, duplicate lines, fractional quantities, invalid threshold relationships, short idempotency keys, and malformed order response shapes.
 - Finance operations remain backed by the existing server RPCs (`create_cash_account`, `create_invoice_from_order`, `record_payment`, `record_expense`); no client-only financial mutation was introduced.
-- The live Supabase schema currently contains the operational finance tables (`operational_invoices`, `operational_invoice_items`, `payments`, `cash_transactions`, `expenses`, `customer_credit_accounts`, `customer_ledger_entries`) with RLS enabled.
+- Corrected the finance service read path to the actual `operational_invoices` schema and derived `paid_amount` from RLS-protected `payments` rows instead of querying the obsolete `sales_invoices` surface.
+- The finance DB command already enforces invoice-balance and cash-account-currency consistency server-side; no client-only financial authority was added.
 
 ### Exact implementation lineage
 - Starting DAY 2 reference supplied by owner: `d1cf83a170a08b65a1f83c7e9fea62e7782bc01b`.
 - Current executable branch: `day2/complete-product`.
-- Current branch head after this round: `44ccc7f83aa76bb5a6683496f07f22e80d989ca8`.
-- Finance adversarial tests: `8cfc388335ece4bb45cf6b7ba3db26bb0fa25ea1`.
-- Evidence update: current file commit follows the finance/adversarial implementation.
+- Current branch head: `58e27e3d5eeec27fb7b977685d27a2f92cc7a718`.
+- Finance service schema-alignment commit: `58e27e3d5eeec27fb7b977685d27a2f92cc7a718`.
 
 ### Verification status
-- The GitHub status observed on the prior exact SHA contained only Vercel deployment rate-limit failures; these are external provider statuses and are not treated as application build/test failures.
-- No automated PASS is claimed for the new test commit until an actual runner reports success on that exact SHA.
-- Supabase security advisor currently reports 47 authenticated-callable `SECURITY DEFINER` functions and one leaked-password-protection warning. These are recorded as security evidence/blockers, not silently converted to PASS.
+- The GitHub status observed on prior exact SHAs contained Vercel deployment rate-limit failures; these are external provider statuses and are not treated as application build/test failures.
+- No automated PASS is claimed for the latest change until an actual runner reports success on that exact SHA.
+- Supabase security evidence remains subject to the current database state; no security warning is silently converted to PASS.
 - Production was not modified or promoted by this DAY 2 work.
 
 ## Next execution front
-Finance mutation consistency → cancellation/refund capability audit against the actual DB contract → concurrency/idempotency adversarial proof → Clean Replay/Test 021 → authenticated browser E2E across Chrome/Edge/Firefox/mobile → regression/gap rescan → final evidence pack and certification gates.
+Finance mutation consistency → cancellation/refund capability against the actual DB contract → concurrency/idempotency adversarial proof → Clean Replay/Test 021 → authenticated browser E2E across Chrome/Edge/Firefox/mobile → regression/gap rescan → final evidence pack and certification gates.
