@@ -5,7 +5,7 @@ import { formatMoney } from './domain/pricing';
 import { getCatalog } from './services/catalog';
 import { setCartItems } from './services/cart';
 import CustomerDashboard from './CustomerDashboard';
-import { createOrderTemplate, deleteOrderTemplate, getCustomerAccount, getCustomerCredit, getCustomerInvoices, getCustomerLedger, getCustomerPayments, getInvoiceLines, applyTemplateToCart, type CustomerCreditAccount, type CustomerInvoice, type CustomerLedgerEntry, type CustomerPayment, type InvoiceLine, type OrderTemplate } from './services/customerPortal';
+import { createOrderTemplate, deleteOrderTemplate, getOrderTemplates, getCustomerAccount, getCustomerCredit, getCustomerInvoices, getCustomerLedger, getCustomerPayments, getInvoiceLines, applyTemplateToCart, type CustomerCreditAccount, type CustomerInvoice, type CustomerLedgerEntry, type CustomerPayment, type InvoiceLine, type OrderTemplate } from './services/customerPortal';
 
 interface Props { cart: CartLine[]; onCartRefresh: () => Promise<void>; customerId: string | null; warehouseId: string | null; }
 type QuickRow = { row: number; sku: string; quantity: number; product?: { id: string; name: string; sku: string; unit: string; available: number }; error?: string };
