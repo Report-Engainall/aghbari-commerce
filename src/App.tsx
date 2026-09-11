@@ -10,7 +10,9 @@ import { getCustomerOrders, type CustomerOrderSummary } from './services/custome
 import { getSession, signIn, signOut } from './services/auth';
 import { supabase } from './lib/supabase';
 import AdminPanel from './AdminPanel';
+import CustomerCommerceHub from './CustomerCommerceHub';
 import './styles.css';
+import './customer-commerce-hub.css';
 
 type UserRole = 'owner' | 'admin' | 'sales' | 'warehouse' | 'viewer';
 const STAFF_ROLES = new Set<UserRole>(['owner', 'admin', 'sales', 'warehouse']);
@@ -130,9 +132,6 @@ export default function App() {
     return () => { cancelled = true; };
   }, [signedIn, orderResult, isOnline]);
 
-  // Customer-facing realtime refresh: status/total changes made by staff are reflected
-  // in the portal without a manual refresh. The database/RLS remains the authority;
-  // this subscription only triggers a fresh, scoped read through getCustomerOrders().
   useEffect(() => {
     const client = supabase;
     if (!client || !signedIn || !customerId) return;
@@ -195,6 +194,11 @@ export default function App() {
     finally { setOrderBusy(false); }
   }
 
+  async function refreshCartFromServer() {
+    const savedCart = await getCart();
+    setCart(savedCart.map((item) => ({ product: products.find((product) => product.id === item.product_id) ?? { id: item.product_id, sku: item.sku, name: item.name, unit: item.unit, category: 'أصناف', availableQuantity: 0, status: 'active' }, quantity: item.quantity, unitPrice: item.authorized_price ?? 0 })));
+  }
+
   if (!sessionReady) return <div className="auth-shell"><div className="auth-card"><span className="eyebrow">الأغبري</span><h1>جارٍ التحقق من الجلسة</h1><p>يتم التحقق من الهوية قبل عرض بيانات المتجر.</p></div></div>;
   if (!signedIn) return <div className="auth-shell"><form className="auth-card" onSubmit={handleLogin}><span className="eyebrow">بوابة الأغبري التجارية</span><h1>تسجيل الدخول</h1><p>ادخل بحسابك للوصول إلى الكتالوج والأسعار المصرح بها.</p><label>البريد الإلكتروني<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><label>كلمة المرور<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" /></label>{authError && <div className="error-banner" role="alert">{authError}</div>}<button className="checkout" disabled={authBusy}>{authBusy ? 'جارٍ الدخول…' : 'دخول آمن'}</button></form></div>;
 
@@ -206,6 +210,7 @@ export default function App() {
       </section>
       <section className="cart-section" id="cart"><div className="section-heading"><div><span className="eyebrow">السلة</span><h2>طلب الجملة</h2></div><span>{cart.length} أصناف</span></div><div className="cart-card">{!cart.length ? <p>السلة فارغة.</p> : <>{cart.map((line) => <article className="cart-line" key={line.product.id}><div><strong>{line.product.name}</strong><small>{formatMoney(priceFor(line.product))} · {line.product.unit}</small></div><div className="qty-controls"><button aria-label={`إنقاص ${line.product.name}`} onClick={() => void updateQuantity(line.product.id, line.quantity - 1)}>−</button><span>{line.quantity}</span><button aria-label={`زيادة ${line.product.name}`} disabled={line.quantity >= line.product.availableQuantity} onClick={() => void updateQuantity(line.product.id, line.quantity + 1)}>+</button></div></article>)}<div className="cart-total"><span>الإجمالي التقديري</span><strong>{formatMoney(total)}</strong></div><button className="checkout" disabled={orderBusy || !customerId || !warehouseId || !isOnline} onClick={() => void submitOrder()}>{orderBusy ? 'جارٍ اعتماد الطلب…' : 'إرسال طلب الجملة'}</button>{orderResult && <div className="success" role="status">{orderResult}</div>}{runtimeError && <div className="error-banner" role="alert">{runtimeError}</div>}</>}</div></section>
       <section className="orders-section" id="orders"><div className="section-heading"><div><span className="eyebrow">الطلبات</span><h2>طلباتي</h2></div><span>{orders.length} آخر الطلبات</span></div>{ordersLoading ? <div className="loading-state">جارٍ تحميل الطلبات…</div> : ordersError ? <div className="error-banner" role="alert">{ordersError}</div> : !orders.length ? <div className="empty-state">لا توجد طلبات بعد.</div> : <div className="orders-list">{orders.map((order) => <article className="order-card" key={order.id}><div><strong>طلب #{order.order_number}</strong><small>{new Date(order.created_at).toLocaleString('ar-YE')}</small></div><div><strong>{formatMoney(order.total)}</strong><span className={`status status-${order.status}`}>{STATUS_LABELS[order.status]}</span></div></article>)}</div>}</section>
+      <CustomerCommerceHub cart={cart} onCartRefresh={refreshCartFromServer} customerId={customerId} warehouseId={warehouseId} />
       {STAFF_ROLES.has(role) && <AdminPanel role={role} />}
     </main></div>;
 }
