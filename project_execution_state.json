@@ -1,69 +1,16 @@
 {
-  "project": "AGHBARI B2B Commerce",
-  "repository": "Report-Engainall/aghbari-commerce",
-  "execution_branch": "day2/complete-product",
-  "identity": "الأغبري",
-  "protocol": "AUDIT → REUSE → REFACTOR → COMPLETE → INTEGRATE → VERIFY",
-  "source_of_truth": "Update existing semantic records; do not create duplicate feature/resource records.",
-  "execution_state": {
-    "current_gate": "DAY 2 — Product Gap Closure / Business Engine / Verification",
-    "current_sha": "814ea52cb834a21da87c38c1e17f06c8f32d1b7a",
-    "previous_sha": "9f714a8820e45dbc8e2983e1a8b6536da5c88dfb",
-    "tested_sha": null,
-    "deployed_sha": null,
-    "production_certified": false,
-    "last_checkpoint": "DAY2-CHECKPOINT-001",
-    "next_exact_action": "Verify current head, then execute the next independent P0/P1 gap and targeted verification."
-  },
-  "feature_registry": {
-    "customer_portal": {"priority":"P0","status":"PARTIAL","frontend":["src/CustomerCommerceHub.tsx","src/CustomerDashboard.tsx","src/CustomerOrderDetailPanel.tsx"],"services":["src/services/customerPortal.ts","src/services/customerOrderDetails.ts"],"remaining":["authenticated browser E2E","logout/login persistence proof","negative/tenant E2E"]},
-    "catalog": {"priority":"P0","status":"PARTIAL","frontend":["src/ProductCatalogPanel.tsx"],"services":["src/services/admin.ts"],"remaining":["full field coverage and browser proof","availability/visibility/MOQ verification"]},
-    "cart_checkout": {"priority":"P0","status":"PARTIAL","services":["src/services/cart.ts"],"remaining":["authenticated browser checkout proof","duplicate/concurrency proof"]},
-    "orders": {"priority":"P0","status":"PARTIAL","frontend":["src/AdminPanel.tsx","src/CustomerOrderDetailPanel.tsx"],"services":["src/services/customerOrderDetails.ts","src/services/staffOrders.ts","src/services/adminOrderDetails.ts"],"remaining":["admin detail UI integration","cancel/return edge cases","full lifecycle E2E"]},
-    "inventory": {"priority":"P0","status":"PARTIAL","services":["src/services/inventory.ts"],"remaining":["concurrency/race proof","transfer/return/reservation scope verification"]},
-    "pricing": {"priority":"P0","status":"PARTIAL","remaining":["server-side tamper test","price snapshot E2E evidence"]},
-    "order_templates": {"priority":"P1","status":"IMPLEMENTED_NOT_FULLY_VERIFIED","frontend":["src/CustomerCommerceHub.tsx"],"services":["src/services/customerPortal.ts"],"database":["order_templates"],"remaining":["authenticated reload/logout/login E2E","negative ownership test"]},
-    "excel_quick_order": {"priority":"P1","status":"PARTIAL","remaining":["full upload→match→review→confirm evidence","negative SKU/qty/duplicate/authorization tests"]},
-    "invoices_accounting": {"priority":"P1","status":"PARTIAL","services":["src/services/customerPortal.ts","src/services/finance.ts"],"database":["operational_invoices","operational_invoice_items","payments","customer_ledger_entries"],"remaining":["invoice/account E2E","ledger consistency evidence"]},
-    "admin": {"priority":"P1","status":"PARTIAL","frontend":["src/AdminPanel.tsx","src/CustomerPanel.tsx","src/ProductCatalogPanel.tsx"],"services":["src/services/adminOrderDetails.ts"],"remaining":["integrate order details UI","category edit/delete","refund only if canonical model supports it","complete action coverage evidence"]},
-    "roles_permissions": {"priority":"P1","status":"PARTIAL","remaining":["adversarial role matrix evidence"]},
-    "import": {"priority":"P1","status":"IMPLEMENTED_NOT_FULLY_VERIFIED","frontend":["src/AdminPanel.tsx"],"services":["src/services/importExcel.ts"],"remaining":["clean replay and atomic commit verification"]},
-    "notifications": {"priority":"P1","status":"PARTIAL","remaining":["verify event-backed notification center scope"]}
-  },
-  "database_registry": {
-    "canonical_finance":["operational_invoices","operational_invoice_items","payments","cash_accounts","cash_transactions","expenses"],
-    "customer_finance":["customer_credit_accounts","customer_ledger_entries"],
-    "commerce":["products","orders","inventory_balances","warehouses","order_templates","customer_invitations","order_items","order_status_history"],
-    "security_note":"RLS/tenant isolation is server-enforced; fresh certification is required when affected resources change."
-  },
-  "rpc_registry": {
-    "set_cart_items":{"purpose":"Replace customer cart items with validated product/quantity set","callers":["customerPortal"],"security_status":"server-enforced; targeted verification required after affected changes"},
-    "get_customer_payments":{"purpose":"Return authenticated customer's payments","callers":["customerPortal"],"security_status":"server-enforced"},
-    "record_payment":{"purpose":"Atomic payment recording and invoice balance/status update","security_status":"row-locking and ownership checks previously inspected"},
-    "transition_order":{"purpose":"Server-authoritative order state transition","callers":["staffOrders"],"security_status":"server RPC; targeted adversarial verification required"}
-  },
-  "test_registry": {
-    "typecheck":"NOT_VERIFIED_ON_CURRENT_SHA",
-    "unit":"NOT_VERIFIED_ON_CURRENT_SHA",
-    "product_integrity":"NOT_VERIFIED_ON_CURRENT_SHA",
-    "architecture":"NOT_VERIFIED_ON_CURRENT_SHA",
-    "order_invariants":"NOT_VERIFIED_ON_CURRENT_SHA",
-    "clean_replay":"FAILED_PREVIOUSLY; FIX APPLIED; RETEST REQUIRED",
-    "test_021":"NOT_VERIFIED_ON_CURRENT_SHA",
-    "browser_matrix":"PREPARED; NOT_EXECUTED/PROVEN",
-    "admin_order_detail_input":"TEST ADDED; NOT_EXECUTED_ON_CURRENT_SHA"
-  },
-  "blocker_registry": {
-    "VERCEL-BUILD-CAPACITY":{"type":"EXTERNAL","status":"OPEN","impact":"production build/deploy/runtime evidence","workaround":"continue typecheck/lint/unit/static/DB/security/E2E preparation","last_checked":"2026-09-11"}
-  },
-  "decision_registry": {
-    "legacy_0013_finance_migration":{"decision":"retire as no-op legacy migration; preserve ordering; use canonical 0032 finance schema","reason":"clean replay previously failed because legacy objects do not exist in canonical schema"},
-    "business_persistence":{"decision":"database-backed for business data; localStorage is not accepted as business persistence","reason":"product command requires real persistence"}
-  },
-  "evidence_registry": {
-    "DAY2-001":{"feature":"order_templates","sha":"13f7bb59e774f5c45df372d9ebb6ee12a019d9fb","result":"IMPLEMENTED_NOT_FULLY_VERIFIED"},
-    "DAY2-002":{"feature":"clean_replay","sha":"3c24995f0f32bf34aebe410c2e64e28e92b1ca3c","result":"FIX_APPLIED_RETEST_REQUIRED"},
-    "DAY2-003":{"feature":"admin_order_details","sha":"9f714a8820e45dbc8e2983e1a8b6536da5c88dfb","result":"SERVICE_AND_INPUT_TEST_ADDED; UI_INTEGRATION_PENDING"}
-  },
-  "zero_repeat":{"registry_checked_before_new_discovery":true,"repeated_discovery":0,"new_discovery_reason":"central execution registry did not previously exist in the execution branch"}
+  "project":"AGHBARI B2B Commerce",
+  "repository":"Report-Engainall/aghbari-commerce",
+  "execution_branch":"day2/complete-product",
+  "identity":"الأغبري",
+  "protocol":"AUDIT → REUSE → REFACTOR → COMPLETE → INTEGRATE → VERIFY",
+  "execution_state":{"current_gate":"DAY 2 — Product Gap Closure / Business Engine / Verification","current_sha":"d9a8e275a5d623a5f0a8733fa71d9f78bc8b9550","previous_sha":"814ea52cb834a21da87c38c1e17f06c8f32d1b7a","tested_sha":null,"deployed_sha":null,"production_certified":false,"last_checkpoint":"DAY2-CHECKPOINT-001","next_exact_action":"Run/obtain exact-SHA verification for current head; then close next independent P0/P1 gap."},
+  "feature_registry":{"customer_portal":{"priority":"P0","status":"PARTIAL","remaining":["authenticated browser E2E","logout/login persistence proof","negative/tenant E2E"]},"catalog":{"priority":"P0","status":"PARTIAL","remaining":["full field coverage and browser proof","availability/visibility/MOQ verification"]},"cart_checkout":{"priority":"P0","status":"PARTIAL","remaining":["authenticated browser checkout proof","duplicate/concurrency proof"]},"orders":{"priority":"P0","status":"PARTIAL","services":["src/services/adminOrderDetails.ts"],"remaining":["admin detail UI integration","cancel/return edge cases","full lifecycle E2E"]},"inventory":{"priority":"P0","status":"PARTIAL","remaining":["concurrency/race proof","transfer/return/reservation scope verification"]},"pricing":{"priority":"P0","status":"PARTIAL","remaining":["server-side tamper test","price snapshot E2E evidence"]},"order_templates":{"priority":"P1","status":"IMPLEMENTED_NOT_FULLY_VERIFIED","remaining":["authenticated reload/logout/login E2E","negative ownership test"]},"excel_quick_order":{"priority":"P1","status":"PARTIAL","remaining":["full upload→match→review→confirm evidence","negative SKU/qty/duplicate/authorization tests"]},"invoices_accounting":{"priority":"P1","status":"PARTIAL","remaining":["invoice/account E2E","ledger consistency evidence"]},"admin":{"priority":"P1","status":"PARTIAL","services":["src/services/adminOrderDetails.ts"],"remaining":["integrate order details UI","category edit/delete","refund only if canonical model supports it","complete action coverage evidence"]},"roles_permissions":{"priority":"P1","status":"PARTIAL","remaining":["adversarial role matrix evidence"]},"import":{"priority":"P1","status":"IMPLEMENTED_NOT_FULLY_VERIFIED","remaining":["clean replay and atomic commit verification"]},"notifications":{"priority":"P1","status":"PARTIAL","remaining":["verify event-backed notification center scope"]}},
+  "database_registry":{"canonical_finance":["operational_invoices","operational_invoice_items","payments","cash_accounts","cash_transactions","expenses"],"customer_finance":["customer_credit_accounts","customer_ledger_entries"],"commerce":["products","orders","inventory_balances","warehouses","order_templates","customer_invitations","order_items","order_status_history"]},
+  "rpc_registry":{"set_cart_items":{"callers":["customerPortal"],"security_status":"server-enforced"},"get_customer_payments":{"callers":["customerPortal"],"security_status":"server-enforced"},"record_payment":{"security_status":"row-locking and ownership checks previously inspected"},"transition_order":{"callers":["staffOrders"],"security_status":"server RPC; adversarial verification pending"}},
+  "test_registry":{"typecheck":"NOT_VERIFIED_ON_CURRENT_SHA","unit":"NOT_VERIFIED_ON_CURRENT_SHA","product_integrity":"NOT_VERIFIED_ON_CURRENT_SHA","architecture":"NOT_VERIFIED_ON_CURRENT_SHA","order_invariants":"NOT_VERIFIED_ON_CURRENT_SHA","clean_replay":"FIX APPLIED; RETEST REQUIRED","test_021":"NOT_VERIFIED_ON_CURRENT_SHA","browser_matrix":"PREPARED; NOT_EXECUTED/PROVEN","admin_order_detail_input":"TEST ADDED; NOT_EXECUTED_ON_CURRENT_SHA"},
+  "blocker_registry":{"VERCEL-BUILD-CAPACITY":{"type":"EXTERNAL","status":"OPEN","impact":"production build/deploy/runtime evidence","workaround":"continue local/DB/test/security/E2E preparation","last_checked":"2026-09-11"}},
+  "decision_registry":{"legacy_0013_finance_migration":{"decision":"retire as no-op legacy migration; preserve ordering; use canonical 0032 finance schema","reason":"clean replay previously failed on removed legacy model"},"business_persistence":{"decision":"database-backed for business data; localStorage is not business persistence","reason":"product requirement"}},
+  "evidence_registry":{"DAY2-001":{"feature":"order_templates","sha":"13f7bb59e774f5c45df372d9ebb6ee12a019d9fb","result":"IMPLEMENTED_NOT_FULLY_VERIFIED"},"DAY2-002":{"feature":"clean_replay","sha":"3c24995f0f32bf34aebe410c2e64e28e92b1ca3c","result":"FIX_APPLIED_RETEST_REQUIRED"},"DAY2-003":{"feature":"admin_order_details","sha":"9f714a8820e45dbc8e2983e1a8b6536da5c88dfb","result":"SERVICE_AND_INPUT_TEST_ADDED; UI_INTEGRATION_PENDING"}},
+  "zero_repeat":{"registry_checked_before_new_discovery":true,"repeated_discovery":0}
 }
