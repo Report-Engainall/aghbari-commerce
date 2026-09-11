@@ -22,6 +22,7 @@ type UserRole = 'owner' | 'admin' | 'sales' | 'warehouse' | 'viewer';
 const tiers: CustomerTier[] = ['retail', 'wholesale', 'distributor'];
 const STAFF_ROLES = new Set<UserRole>(['owner', 'admin', 'sales', 'warehouse']);
 const STATUS_LABELS: Record<OrderStatus, string> = { draft: 'مسودة', pending: 'قيد المراجعة', confirmed: 'مؤكد', preparing: 'قيد التجهيز', ready: 'جاهز', completed: 'مكتمل', cancelled: 'ملغي' };
+const ORDER_PAGE_SIZE = 15;
 
 function allowedNextStatuses(status: OrderStatus, role: UserRole): OrderStatus[] {
   if (status === 'pending' && ['owner', 'admin', 'sales'].includes(role)) return ['confirmed', 'cancelled'];
@@ -38,6 +39,9 @@ export default function AdminPanel({ role }: { role: UserRole }) {
   const [orders, setOrders] = useState<StaffOrderSummary[]>([]);
   const [metrics, setMetrics] = useState<StaffDashboardMetrics | null>(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [orderQuery, setOrderQuery] = useState('');
+  const [orderStatus, setOrderStatus] = useState<'all' | OrderStatus>('all');
+  const [orderPage, setOrderPage] = useState(1);
   const [product, setProduct] = useState({ sku: '', name: '', unit: 'كرتون', categoryId: '', description: '' });
   const [category, setCategory] = useState({ name: '', slug: '', parentId: '' });
   const [selectedProduct, setSelectedProduct] = useState('');
@@ -62,7 +66,7 @@ export default function AdminPanel({ role }: { role: UserRole }) {
       const [{ data: productRows, error: productError }, { data: warehouseRows, error: warehouseError }, categoryRows, orderRows, dashboardMetrics] = await Promise.all([
         client.from('products').select('id,sku,name,unit,status,category_id,description').eq('status', 'active').order('name').limit(200),
         client.from('warehouses').select('id,name').eq('is_active', true).order('created_at'),
-        getCategories(), getStaffOrders(50), getStaffDashboardMetrics()
+        getCategories(), getStaffOrders(100), getStaffDashboardMetrics()
       ]);
       if (productError) throw productError;
       if (warehouseError) throw warehouseError;
@@ -123,6 +127,18 @@ export default function AdminPanel({ role }: { role: UserRole }) {
   const canInventory = role === 'owner' || role === 'admin' || role === 'warehouse';
   const canOrderWorkflow = STAFF_ROLES.has(role);
   const canFinance = ['owner', 'admin', 'sales'].includes(role);
+
+  const filteredOrders = useMemo(() => {
+    const needle = orderQuery.trim().toLowerCase();
+    return orders.filter((order) => {
+      const matchesQuery = !needle || `${order.order_number} ${order.customer_name} ${order.customer_id}`.toLowerCase().includes(needle);
+      const matchesStatus = orderStatus === 'all' || order.status === orderStatus;
+      return matchesQuery && matchesStatus;
+    });
+  }, [orders, orderQuery, orderStatus]);
+  const orderPageCount = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
+  const visibleOrders = filteredOrders.slice((orderPage - 1) * ORDER_PAGE_SIZE, orderPage * ORDER_PAGE_SIZE);
+  useEffect(() => { if (orderPage > orderPageCount) setOrderPage(orderPageCount); }, [orderPage, orderPageCount]);
 
   const operational = useMemo(() => {
     if (metrics) return {
@@ -197,7 +213,12 @@ export default function AdminPanel({ role }: { role: UserRole }) {
     </div>
     {canCatalog && <ProductCatalogPanel role={role} />}
     <div id="orders-admin">
-      {canOrderWorkflow && <div className="cart-panel"><div className="section-heading"><div><span className="eyebrow">التشغيل</span><h2>إدارة الطلبات</h2></div><span>{orders.length} طلبات ظاهرة</span></div>{ordersLoading ? <div className="cart-empty">جارٍ تحميل الطلبات…</div> : !orders.length ? <div className="cart-empty">لا توجد طلبات تشغيلية بعد.</div> : <div className="cart-lines">{orders.map((order) => <article className="cart-line" key={order.id}><div><strong>طلب #{order.order_number}</strong><small>العميل: {order.customer_name}</small></div><div><strong>{formatMoney(order.total)} {order.currency}</strong><small>الحالة: {STATUS_LABELS[order.status]}</small></div><div className="status-actions">{allowedNextStatuses(order.status, role).map((next) => <button key={next} disabled={busy} onClick={() => void changeOrderStatus(order.id, next)} aria-label={`تحويل الطلب ${order.order_number} إلى ${STATUS_LABELS[next]}`}>{STATUS_LABELS[next]}</button>)}</div></article>)}</div>}</div>}
+      {canOrderWorkflow && <div className="cart-panel">
+        <div className="section-heading"><div><span className="eyebrow">التشغيل</span><h2>إدارة الطلبات</h2></div><span>{filteredOrders.length} من {orders.length} طلب</span></div>
+        <div className="admin-filters"><input aria-label="بحث الطلبات" placeholder="بحث برقم الطلب أو اسم العميل أو معرف العميل" value={orderQuery} onChange={(e) => { setOrderQuery(e.target.value); setOrderPage(1); }} /><select aria-label="حالة الطلب" value={orderStatus} onChange={(e) => { setOrderStatus(e.target.value as 'all' | OrderStatus); setOrderPage(1); }}><option value="all">كل الحالات</option>{(Object.keys(STATUS_LABELS) as OrderStatus[]).map((status) => <option key={status} value={status}>{STATUS_LABELS[status]}</option>)}</select></div>
+        {ordersLoading ? <div className="cart-empty">جارٍ تحميل الطلبات…</div> : !visibleOrders.length ? <div className="cart-empty">لا توجد طلبات مطابقة.</div> : <div className="cart-lines">{visibleOrders.map((order) => <article className="cart-line" key={order.id}><div><strong>طلب #{order.order_number}</strong><small>العميل: {order.customer_name}</small></div><div><strong>{formatMoney(order.total)} {order.currency}</strong><small>الحالة: {STATUS_LABELS[order.status]}</small></div><div className="status-actions">{allowedNextStatuses(order.status, role).map((next) => <button key={next} type="button" disabled={busy} onClick={() => void changeOrderStatus(order.id, next)} aria-label={`تحويل الطلب ${order.order_number} إلى ${STATUS_LABELS[next]}`}>{STATUS_LABELS[next]}</button>)}</div></article>)}</div>}
+        {filteredOrders.length > ORDER_PAGE_SIZE && <div className="pagination" aria-label="صفحات الطلبات"><button type="button" disabled={orderPage <= 1 || busy} onClick={() => setOrderPage((current) => current - 1)}>السابق</button><span>صفحة {orderPage} من {orderPageCount}</span><button type="button" disabled={orderPage >= orderPageCount || busy} onClick={() => setOrderPage((current) => current + 1)}>التالي</button></div>}
+      </div>}
     </div>
     {error && <div className="error-banner" role="alert">{error}</div>}{message && <div className="success" role="status">{message}</div>}
     <div id="inventory-admin">{canInventory && <InventoryPanel role={role} />}</div>
