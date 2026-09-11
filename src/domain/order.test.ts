@@ -4,7 +4,8 @@ import { calculateClientPreviewTotal, validateOrderDraft } from './order';
 const productValue = { id: '1', sku: '1', name: 'A', unit: 'قطعة', category: 'أ', availableQuantity: 10, status: 'active' as const };
 const PRODUCT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
-function draft(lines: Array<{ productId: string; quantity: number }>, idempotencyKey = 'order-test-key-001'): any { return { idempotencyKey, lines }; }
+type OrderDraftInput = Parameters<typeof validateOrderDraft>[0];
+function draft(lines: Array<{ productId: string; quantity: number }>, idempotencyKey = 'order-test-key-001'): OrderDraftInput { return { idempotencyKey, lines }; }
 
 describe('validateOrderDraft', () => {
   it('accepts a bounded multi-line order with sufficient stock', () => expect(() => validateOrderDraft(draft([{ productId: PRODUCT_A, quantity: 2 }]), new Map([[PRODUCT_A, 3]]))).not.toThrow());
@@ -16,7 +17,7 @@ describe('validateOrderDraft', () => {
     expect(() => validateOrderDraft(draft([{ productId: ' ', quantity: 1 }]), new Map([[' ', 3]]))).toThrow(/productId/);
     expect(() => validateOrderDraft(draft([{ productId: PRODUCT_A, quantity: 1 }], ' '), new Map([[PRODUCT_A, 3]]))).toThrow(/idempotencyKey/);
   });
-  it('rejects a non-array line collection', () => expect(() => validateOrderDraft({ idempotencyKey: 'order-test-key-001', lines: null } as any, new Map())).toThrow(/order must/));
+  it('rejects a non-array line collection', () => expect(() => validateOrderDraft({ idempotencyKey: 'order-test-key-001', lines: null } as never, new Map())).toThrow(/order must/));
   it('rejects an empty order', () => expect(() => validateOrderDraft(draft([]), new Map())).toThrow(/at least one line/));
   it('rejects an idempotency key above the boundary limit', () => expect(() => validateOrderDraft(draft([{ productId: PRODUCT_A, quantity: 1 }], 'x'.repeat(129)), new Map([[PRODUCT_A, 3]]))).toThrow(/128/));
   it('rejects quantities above the domain limit', () => expect(() => validateOrderDraft(draft([{ productId: PRODUCT_A, quantity: 10001 }]), new Map([[PRODUCT_A, 10001]]))).toThrow(/10000/));
@@ -27,10 +28,10 @@ describe('validateOrderDraft', () => {
   it('rejects a quantity greater than available stock', () => expect(() => validateOrderDraft(draft([{ productId: PRODUCT_A, quantity: 4 }]), new Map([[PRODUCT_A, 3]]))).toThrow(/insufficient stock/));
   it('rejects invalid negative or unsafe inventory quantities', () => { expect(() => validateOrderDraft(draft([{ productId: PRODUCT_A, quantity: 1 }]), new Map([[PRODUCT_A, -1]]))).toThrow(/invalid inventory/); expect(() => validateOrderDraft(draft([{ productId: PRODUCT_A, quantity: 1 }]), new Map([[PRODUCT_A, Number.MAX_SAFE_INTEGER + 1]]))).toThrow(/invalid inventory/); });
   it('rejects non-integer and non-finite inventory quantities', () => { expect(() => validateOrderDraft(draft([{ productId: PRODUCT_A, quantity: 1 }]), new Map([[PRODUCT_A, 1.5]]))).toThrow(/invalid inventory/); expect(() => validateOrderDraft(draft([{ productId: PRODUCT_A, quantity: 1 }]), new Map([[PRODUCT_A, Number.NaN]]))).toThrow(/invalid inventory/); });
-  it('rejects a non-object draft at the runtime boundary', () => expect(() => validateOrderDraft(null as any, new Map())).toThrow(/draft/));
-  it('rejects a missing or non-string idempotency key', () => { expect(() => validateOrderDraft({ lines: [{ productId: PRODUCT_A, quantity: 1 }] } as any, new Map([[PRODUCT_A, 2]]))).toThrow(/idempotencyKey/); expect(() => validateOrderDraft({ idempotencyKey: 123, lines: [{ productId: PRODUCT_A, quantity: 1 }] } as any, new Map([[PRODUCT_A, 2]]))).toThrow(/idempotencyKey/); });
-  it('rejects a non-object order line before reading its fields', () => expect(() => validateOrderDraft(draft([null as any]), new Map([[PRODUCT_A, 2]]))).toThrow(/order line/));
-  it('rejects a non-string product identifier at runtime', () => expect(() => validateOrderDraft(draft([{ productId: 123 as any, quantity: 1 }]), new Map([[PRODUCT_A, 2]]))).toThrow(/productId/));
+  it('rejects a non-object draft at the runtime boundary', () => expect(() => validateOrderDraft(null as never, new Map())).toThrow(/draft/));
+  it('rejects a missing or non-string idempotency key', () => { expect(() => validateOrderDraft({ lines: [{ productId: PRODUCT_A, quantity: 1 }] } as never, new Map([[PRODUCT_A, 2]]))).toThrow(/idempotencyKey/); expect(() => validateOrderDraft({ idempotencyKey: 123, lines: [{ productId: PRODUCT_A, quantity: 1 }] } as never, new Map([[PRODUCT_A, 2]]))).toThrow(/idempotencyKey/); });
+  it('rejects a non-object order line before reading its fields', () => expect(() => validateOrderDraft(draft([null as never]), new Map([[PRODUCT_A, 2]]))).toThrow(/order line/));
+  it('rejects a non-string product identifier at runtime', () => expect(() => validateOrderDraft(draft([{ productId: 123 as never, quantity: 1 }]), new Map([[PRODUCT_A, 2]]))).toThrow(/productId/));
   it('rejects an invalid inventory container at the runtime boundary', () => expect(() => validateOrderDraft(draft([{ productId: 'product-1', quantity: 1 }]), null as never)).toThrow(/inventory map/));
 });
 
