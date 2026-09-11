@@ -32,6 +32,13 @@ export async function getCustomers(limit = 200) {
 export async function createCustomer(name: string, phone: string, tier: CustomerTier) {
   const input = validateCustomerInput(name, phone, tier); const { data, error } = await requireSupabase().rpc('create_customer', { p_name: input.name, p_phone: input.phone, p_tier: input.tier }); if (error) throw error; return data as StaffCustomer;
 }
+export async function updateCustomer(customerId: string, name: string, phone: string, tier: CustomerTier) {
+  const id = requireUuid(customerId, 'العميل'); const input = validateCustomerInput(name, phone, tier);
+  const { data, error } = await requireSupabase().rpc('update_customer', { p_customer_id: id, p_name: input.name, p_phone: input.phone, p_tier: input.tier });
+  if (error) throw error;
+  if (!data || typeof data !== 'object' || typeof (data as { id?: unknown }).id !== 'string') throw new Error('استجابة تحديث العميل غير صالحة. لم يتم إثبات نجاح العملية.');
+  return data as StaffCustomer;
+}
 export async function setCustomerTier(customerId: string, tier: CustomerTier) {
   const id = requireUuid(customerId, 'العميل'); const normalizedTier = validateCustomerTier(tier); const { data, error } = await requireSupabase().rpc('set_customer_tier', { p_customer_id: id, p_tier: normalizedTier }); if (error) throw error; return data as StaffCustomer;
 }
