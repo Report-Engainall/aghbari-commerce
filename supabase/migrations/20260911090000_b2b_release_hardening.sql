@@ -1,8 +1,7 @@
--- Coherent security/reliability hardening for the a306 candidate.
--- This migration is intentionally source-only until the coherent fix set is reviewed,
--- then replayed on Clean Branch and promoted as one candidate.
+-- Coherent security/reliability hardening for the four-day completion candidate.
+-- Payment idempotency, device response redaction, trigger-only notification authorization,
+-- and removal of the obsolete catalog RPC are applied as one atomic migration.
 
--- Payment idempotency contract.
 alter table public.payments
   add column if not exists idempotency_key text,
   add column if not exists idempotency_payload_hash text;
@@ -43,11 +42,9 @@ begin
   if v_org is null or v_actor is null or v_role not in ('owner','admin','sales') then
     raise exception using errcode = '42501';
   end if;
-
   if v_key is null or pg_catalog.length(v_key) > 128 then
     raise exception 'مفتاح العملية مطلوب وغير صالح.' using errcode = '22023';
   end if;
-
   v_payload_hash := pg_catalog.md5(
     pg_catalog.jsonb_build_object(
       'invoice_id', p_invoice_id,
@@ -58,46 +55,37 @@ begin
       'actor_id', v_actor
     )::text
   );
-
   pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_org::text || ':' || v_key, 0));
-
   select * into v_existing
     from public.payments
    where organization_id = v_org
      and idempotency_key = v_key
    limit 1;
-
   if found then
     if v_existing.idempotency_payload_hash is distinct from v_payload_hash then
       raise exception 'مفتاح العملية مستخدم لطلب مختلف.' using errcode = '23505';
     end if;
     return v_existing;
   end if;
-
   select * into v_invoice
     from public.operational_invoices
    where id = p_invoice_id
      and organization_id = v_org
    for update;
-
   if not found or p_amount is null or p_amount <= 0 then
     raise exception using errcode = '22023';
   end if;
-
-  select pg_catalog.coalesce(pg_catalog.sum(amount), 0)
+  select coalesce(sum(amount), 0)
     into v_paid
     from public.payments
    where organization_id = v_org
      and invoice_id = v_invoice.id;
-
   if p_amount > v_invoice.total - v_paid then
     raise exception using errcode = '22003';
   end if;
-
   if p_method = 'cash' and p_cash_account_id is null then
     raise exception using errcode = '22023';
   end if;
-
   if p_cash_account_id is not null then
     select * into v_account
       from public.cash_accounts
@@ -109,54 +97,26 @@ begin
       raise exception using errcode = '22023';
     end if;
   end if;
-
   insert into public.payments(
-    organization_id,
-    invoice_id,
-    cash_account_id,
-    amount,
-    method,
-    reference,
-    actor_id,
-    idempotency_key,
-    idempotency_payload_hash
+    organization_id, invoice_id, cash_account_id, amount, method,
+    reference, actor_id, idempotency_key, idempotency_payload_hash
   ) values (
-    v_org,
-    v_invoice.id,
-    p_cash_account_id,
-    p_amount,
-    p_method,
-    v_reference,
-    v_actor,
-    v_key,
-    v_payload_hash
+    v_org, v_invoice.id, p_cash_account_id, p_amount, p_method,
+    v_reference, v_actor, v_key, v_payload_hash
   ) returning * into v_payment;
-
   if p_cash_account_id is not null then
     insert into public.cash_transactions(
-      organization_id,
-      cash_account_id,
-      direction,
-      amount,
-      source_type,
-      source_id,
-      actor_id
+      organization_id, cash_account_id, direction, amount,
+      source_type, source_id, actor_id
     ) values (
-      v_org,
-      p_cash_account_id,
-      'in',
-      p_amount,
-      'payment',
-      v_payment.id,
-      v_actor
+      v_org, p_cash_account_id, 'in', p_amount,
+      'payment', v_payment.id, v_actor
     );
   end if;
-
   update public.operational_invoices
      set status = case when v_paid + p_amount >= total then 'paid' else 'partially_paid' end,
          updated_at = now()
    where id = v_invoice.id;
-
   return v_payment;
 exception
   when unique_violation then
@@ -174,14 +134,10 @@ $$;
 
 grant execute on function public.record_payment(uuid, numeric, public.payment_method, uuid, text, text) to authenticated;
 
--- Device security response contracts: never return device_key_hash/requested_device_key_hash.
+-- Device RPCs return sanitized JSON only; stored hashes never cross the API boundary.
 drop function if exists public.bind_customer_device(text, text);
 create function public.bind_customer_device(p_device_key_hash text, p_device_label text default null)
-returns jsonb
-language plpgsql
-security definer
-set search_path = ''
-as $$
+returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   v_org uuid := public.current_organization_id();
   v_customer uuid := public.current_customer_id();
@@ -202,11 +158,7 @@ grant execute on function public.bind_customer_device(text, text) to authenticat
 revoke all on function public.request_customer_device_change(text, text, text) from public, authenticated, anon;
 drop function if exists public.request_customer_device_change(text, text, text);
 create function public.request_customer_device_change(p_device_key_hash text, p_device_label text default null, p_reason text default null)
-returns jsonb
-language plpgsql
-security definer
-set search_path = ''
-as $$
+returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   v_org uuid := public.current_organization_id();
   v_customer uuid := public.current_customer_id();
@@ -228,11 +180,7 @@ grant execute on function public.request_customer_device_change(text, text, text
 revoke all on function public.review_device_change_request(uuid, boolean, text) from public, authenticated, anon;
 drop function if exists public.review_device_change_request(uuid, boolean, text);
 create function public.review_device_change_request(p_request_id uuid, p_approve boolean, p_reason text default null)
-returns jsonb
-language plpgsql
-security definer
-set search_path = ''
-as $$
+returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   v_org uuid := public.current_organization_id();
   v_request public.device_change_requests;
@@ -256,14 +204,9 @@ end;
 $$;
 grant execute on function public.review_device_change_request(uuid, boolean, text) to authenticated;
 
--- Trigger-only function: authenticated callers must not be able to invoke it as an RPC.
 revoke all on function public.notify_order_status_change() from public, authenticated, anon;
 create or replace function public.notify_order_status_change()
-returns trigger
-language plpgsql
-security definer
-set search_path = ''
-as $$
+returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   if new.to_status is distinct from old.to_status then
     insert into public.notifications(organization_id, customer_id, kind, title, body, entity_type, entity_id)
@@ -274,7 +217,5 @@ begin
 end;
 $$;
 
--- Remove the obsolete four-argument catalog RPC. The five-argument warehouse-bound
--- RPC is the canonical application contract.
 revoke all on function public.get_catalog(text, uuid, integer, integer) from public, authenticated, anon;
 drop function public.get_catalog(text, uuid, integer, integer);
