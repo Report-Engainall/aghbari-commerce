@@ -33,24 +33,31 @@
 
 - Prior exact-SHA Quality runner failed at TypeScript before unit tests. Root cause was captured from the actual runner: a `getOrderTemplates` resolution failure in `CustomerCommerceHub.tsx` and an implicit-`any` invoice mapper parameter in `customerPortal.ts`.
 - The customer portal mapper was hardened with an explicit `CustomerInvoiceRow` boundary so strict TypeScript does not depend on generated Supabase inference.
-- The customer template E2E now explicitly covers create → DB persistence → reload → template remains → apply to real cart.
+- The customer template E2E explicitly covers create → DB persistence → reload → template remains → apply to real cart.
 - Browser certification configuration was expanded from Chromium-only to Chrome, Edge, Firefox, and mobile Chrome (`Pixel 5`).
-- Runtime E2E workflow now installs all required browsers and executes the complete Playwright project matrix.
+- Runtime E2E workflow installs all required browsers and executes the complete Playwright project matrix.
+
+## 2026-09-11 — Gap rescan hardening
+
+- Re-ran the source-level product integrity search for legacy branding, browser storage persistence, placeholder actions, TODO/FIXME markers, and debug console calls.
+- The repository search returned no matches for the targeted gap patterns.
+- Strengthened `scripts/product-integrity-audit.mjs` so the release gate itself fails when `localStorage`/`sessionStorage`, placeholder/debug action markers, legacy branding, or debug console calls are introduced under `src`.
+- This is a guardrail, not proof that runtime E2E or production behavior is certified.
 
 ### Exact implementation lineage
 - Owner-supplied DAY 2 reference: `d1cf83a170a08b65a1f83c7e9fea62e7782bc01b`.
 - Executable branch: `day2/complete-product`.
-- Finance schema alignment: `58e27e3d5eeec27fb7b977685d27a2f92cc7a718`.
-- Customer portal strict-typing repair: `2a3daa5db60db71381cbc30c2448626eb25d8925`.
-- Browser matrix hardening: `eb2d08070e568a2d74cf4834824214ecc41021f6` and `4316b608d2a85b8c06590ecad9b2f8be047fed18`.
-- Authenticated order-template E2E coverage: `7281a66e800c3100c34c91662755d7dd477b9fa6`.
-- Current evidence-log update follows the latest implementation commits.
+- Current HEAD after gap-scan hardening: `40c63636acd0e1422d04922a03915977cdeca40b`.
+- Earlier finance schema alignment: `58e27e3d5eeec27fb7b977685d27a2f92cc7a718`.
+- Earlier customer portal strict-typing repair: `2a3daa5db60db71381cbc30c2448626eb25d8925`.
+- Earlier browser matrix hardening: `eb2d08070e568a2d74cf4834824214ecc41021f6` and `4316b608d2a85b8c06590ecad9b2f8be047fed18`.
+- Earlier authenticated order-template E2E coverage: `7281a66e800c3100c34c91662755d7dd477b9fa6`.
+- Latest evidence-log update follows the current implementation lineage.
 
 ### Verification status
-- Exact SHA checkout and HEAD verification passed on the earlier `58e27e3...` Quality run, proving the runner tested the intended SHA; TypeScript then failed before later gates. That failure is not being hidden or converted to PASS.
-- A subsequent workflow run for `2a3daa5...` was observed in progress at the time of inspection; no PASS is claimed until its completed result is retrieved.
-- Order Workflow Proof previously completed successfully on its exact tested SHA.
-- Security audit previously completed successfully on its exact tested SHA; this is not transferred as certification for newer SHAs.
+- Exact SHA checkout and HEAD verification passed on the earlier `58e27e3...` Quality run, proving the runner tested the intended SHA; TypeScript then failed before later gates. That failure is not hidden or converted to PASS.
+- A newer workflow execution for `40c63636acd0e1422d04922a03915977cdeca40b` is now queued/in progress; no PASS is claimed until completion is retrieved.
+- Order Workflow Proof and Security Audit have prior exact-SHA successful runs; those results are not transferred to newer SHAs.
 - Vercel/Production status is not treated as build or runtime evidence until the exact current SHA is deployed and externally verified.
 - Production and `main` were not modified or promoted by these DAY 2 commits.
 
