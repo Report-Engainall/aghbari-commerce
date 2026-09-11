@@ -1,0 +1,70 @@
+{
+  "project": "AGHBARI B2B Commerce",
+  "repository": "Report-Engainall/aghbari-commerce",
+  "execution_branch": "day2/complete-product",
+  "identity": "الأغبري",
+  "protocol": "AUDIT → REUSE → REFACTOR → COMPLETE → INTEGRATE → VERIFY",
+  "source_of_truth": "This registry is append-safe at the semantic record level; update existing feature/resource records rather than creating duplicates.",
+  "execution_state": {
+    "current_gate": "DAY 2 — Product Gap Closure / Business Engine / Verification",
+    "current_sha": "3c24995f0f32bf34aebe410c2e64e28e92b1ca3c",
+    "previous_sha": "13f7bb59e774f5c45df372d9ebb6ee12a019d9fb",
+    "tested_sha": null,
+    "deployed_sha": null,
+    "production_certified": false,
+    "last_checkpoint": "DAY2-CHECKPOINT-001",
+    "next_exact_action": "Targeted verification of the clean-replay migration fix, then close remaining P0/P1 gaps with evidence."
+  },
+  "feature_registry": {
+    "customer_portal": {"priority":"P0","status":"PARTIAL","frontend":["src/CustomerCommerceHub.tsx","src/CustomerDashboard.tsx","src/CustomerOrderDetailPanel.tsx"],"services":["src/services/customerPortal.ts","src/services/customerOrderDetails.ts"],"remaining":["authenticated browser E2E","logout/login persistence proof","negative/tenant E2E"],"last_verified_sha":null},
+    "catalog": {"priority":"P0","status":"PARTIAL","frontend":["src/ProductCatalogPanel.tsx"],"services":["src/services/admin.ts"],"remaining":["full field coverage and browser proof","availability/visibility/MOQ verification"],"last_verified_sha":null},
+    "cart_checkout": {"priority":"P0","status":"PARTIAL","services":["src/services/cart.ts"],"remaining":["real authenticated browser checkout proof","duplicate/concurrency proof"],"last_verified_sha":null},
+    "orders": {"priority":"P0","status":"PARTIAL","frontend":["src/AdminPanel.tsx","src/CustomerOrderDetailPanel.tsx"],"services":["src/services/customerOrderDetails.ts","src/services/staffOrders.ts","src/services/adminOrderDetails.ts"],"remaining":["admin detail integration proof","cancel/return edge cases","full lifecycle E2E"],"last_verified_sha":null},
+    "inventory": {"priority":"P0","status":"PARTIAL","services":["src/services/inventory.ts"],"remaining":["concurrency/Race proof","transfer/return/reservation scope verification"],"last_verified_sha":null},
+    "pricing": {"priority":"P0","status":"PARTIAL","remaining":["server-side tamper test","price snapshot E2E evidence"],"last_verified_sha":null},
+    "order_templates": {"priority":"P1","status":"IMPLEMENTED_NOT_FULLY_VERIFIED","frontend":["src/CustomerCommerceHub.tsx"],"services":["src/services/customerPortal.ts"],"database":["order_templates"],"remaining":["authenticated reload/logout/login E2E","negative ownership test"],"last_verified_sha":null},
+    "excel_quick_order": {"priority":"P1","status":"PARTIAL","remaining":["full upload→match→review→confirm evidence","negative SKU/qty/duplicate/authorization tests"],"last_verified_sha":null},
+    "invoices_accounting": {"priority":"P1","status":"PARTIAL","services":["src/services/customerPortal.ts","src/services/finance.ts"],"database":["operational_invoices","operational_invoice_items","payments","customer_ledger_entries"],"remaining":["invoice/account E2E","ledger consistency evidence"],"last_verified_sha":null},
+    "admin": {"priority":"P1","status":"PARTIAL","frontend":["src/AdminPanel.tsx","src/CustomerPanel.tsx","src/ProductCatalogPanel.tsx"],"remaining":["category edit/delete","admin order details integration","refund if canonical model supports it","complete action coverage evidence"],"last_verified_sha":null},
+    "roles_permissions": {"priority":"P1","status":"PARTIAL","remaining":["adversarial role matrix evidence"],"last_verified_sha":null},
+    "import": {"priority":"P1","status":"IMPLEMENTED_NOT_FULLY_VERIFIED","frontend":["src/AdminPanel.tsx"],"services":["src/services/importExcel.ts"],"remaining":["clean replay and atomic commit verification"],"last_verified_sha":null},
+    "notifications": {"priority":"P1","status":"PARTIAL","remaining":["verify event-backed notification center scope"],"last_verified_sha":null}
+  },
+  "database_registry": {
+    "canonical_finance": ["operational_invoices","operational_invoice_items","payments","cash_accounts","cash_transactions","expenses"],
+    "customer_finance": ["customer_credit_accounts","customer_ledger_entries"],
+    "commerce": ["products","orders","inventory_balances","warehouses","order_templates","customer_invitations"],
+    "security_note": "RLS/tenant isolation is server-enforced; live certification requires fresh evidence when affected resources change."
+  },
+  "rpc_registry": {
+    "set_cart_items": {"purpose":"Replace customer cart items with validated product/quantity set","callers":["customerPortal"],"security_status":"server-enforced; requires targeted verification after changes","last_verified_sha":null},
+    "get_customer_payments": {"purpose":"Return authenticated customer's payments","callers":["customerPortal"],"security_status":"server-enforced","last_verified_sha":null},
+    "record_payment": {"purpose":"Atomic payment recording and invoice balance/status update","security_status":"row-locking and ownership checks previously inspected","last_verified_sha":null}
+  },
+  "test_registry": {
+    "typecheck": {"status":"NOT_VERIFIED_ON_CURRENT_SHA"},
+    "unit": {"status":"NOT_VERIFIED_ON_CURRENT_SHA"},
+    "product_integrity": {"status":"NOT_VERIFIED_ON_CURRENT_SHA"},
+    "architecture": {"status":"NOT_VERIFIED_ON_CURRENT_SHA"},
+    "order_invariants": {"status":"NOT_VERIFIED_ON_CURRENT_SHA"},
+    "clean_replay": {"status":"FAILED_PREVIOUSLY; FIX APPLIED; RETEST REQUIRED","previous_failure":"0013_finance_b2b_pipeline.sql referenced legacy sales_invoices/companies model","fix_sha":"3c24995f0f32bf34aebe410c2e64e28e92b1ca3c"},
+    "test_021": {"status":"NOT_VERIFIED_ON_CURRENT_SHA"},
+    "browser_matrix": {"status":"PREPARED; NOT_EXECUTED/PROVEN","targets":["Chrome","Edge","Firefox","Desktop","Tablet","Mobile"]}
+  },
+  "blocker_registry": {
+    "VERCEL-BUILD-CAPACITY": {"type":"EXTERNAL","status":"OPEN","impact":"production build/deploy/runtime evidence","workaround":"continue typecheck/lint/unit/static/DB/security/E2E preparation","last_checked":"2026-09-11"}
+  },
+  "decision_registry": {
+    "legacy_0013_finance_migration": {"decision":"retire as no-op legacy migration; preserve ordering; use canonical 0032 finance schema","reason":"clean replay previously failed because legacy objects do not exist in canonical schema","affected_features":["clean_replay","finance","invoices"]},
+    "business_persistence": {"decision":"database-backed for business data; localStorage is not accepted as business persistence","reason":"product command requires real persistence"}
+  },
+  "evidence_registry": {
+    "DAY2-001": {"feature":"order_templates","evidence":"DB/RLS and service implementation inspected","sha":"13f7bb59e774f5c45df372d9ebb6ee12a019d9fb","result":"IMPLEMENTED_NOT_FULLY_VERIFIED"},
+    "DAY2-002": {"feature":"clean_replay","evidence":"0013 failure root cause identified and fixed","sha":"3c24995f0f32bf34aebe410c2e64e28e92b1ca3c","result":"FIX_APPLIED_RETEST_REQUIRED"}
+  },
+  "zero_repeat": {
+    "registry_checked_before_new_discovery": true,
+    "repeated_discovery": 0,
+    "new_discovery_reason": "central execution registry did not previously exist in the execution branch"
+  }
+}
