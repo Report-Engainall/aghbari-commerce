@@ -67,6 +67,37 @@ test('authenticated customer completes real catalog → cart → order → refre
   expect(failures.failedResponses, `HTTP responses >= 400: ${failures.failedResponses.join(' | ')}`).toEqual([]);
 });
 
+test('authenticated customer persists an order template through reload and re-applies it to the real cart', async ({ page }) => {
+  const email = process.env.E2E_EMAIL;
+  const password = process.env.E2E_PASSWORD;
+  if (!email || !password) throw new Error('E2E_EMAIL and E2E_PASSWORD are required; runtime tests must never silently skip.');
+
+  const failures = captureBrowserFailures(page);
+  await login(page, email, password);
+  await expect(page.getByText('الكتالوج')).toBeVisible();
+
+  const addButton = page.getByRole('button', { name: /إضافة|أضف/ }).first();
+  await expect(addButton).toBeEnabled();
+  await addButton.click();
+
+  const templateName = `E2E-${Date.now()}`;
+  const templateInput = page.getByRole('textbox', { name: 'اسم قالب الطلب' });
+  await templateInput.fill(templateName);
+  await page.getByRole('button', { name: 'حفظ السلة كقالب' }).click();
+  await expect(page.getByText(templateName, { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByText(templateName, { exact: true })).toBeVisible();
+
+  const templateRow = page.locator('article.portal-row').filter({ hasText: templateName }).first();
+  await templateRow.getByRole('button', { name: 'إلى السلة' }).click();
+  await expect(page.getByRole('button', { name: /السلة/ })).toContainText('1');
+
+  expect(failures.pageErrors, `Uncaught browser errors: ${failures.pageErrors.join(' | ')}`).toEqual([]);
+  expect(failures.consoleErrors, `Browser console errors: ${failures.consoleErrors.join(' | ')}`).toEqual([]);
+  expect(failures.failedResponses, `HTTP responses >= 400: ${failures.failedResponses.join(' | ')}`).toEqual([]);
+});
+
 test('tenant isolation: Tenant B cannot read Tenant A order through the real UI session', async ({ browser }) => {
   const emailA = process.env.E2E_EMAIL;
   const passwordA = process.env.E2E_PASSWORD;
