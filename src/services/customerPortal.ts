@@ -1,0 +1,180 @@
+import { requireSupabase } from '../lib/supabase';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export interface OrderTemplateLine {
+  product_id: string;
+  sku: string;
+  name: string;
+  unit: string;
+  quantity: number;
+}
+
+export interface OrderTemplate {
+  id: string;
+  name: string;
+  branch_label: string | null;
+  lines: OrderTemplateLine[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerInvoice {
+  id: string;
+  invoice_number: number;
+  order_id: string;
+  customer_id: string;
+  status: 'issued' | 'partially_paid' | 'paid' | 'void';
+  currency: string;
+  subtotal: number;
+  total: number;
+  due_at: string | null;
+  created_at: string;
+}
+
+export interface InvoiceLine {
+  id: string;
+  product_id: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+}
+
+export interface CustomerPayment {
+  id: string;
+  invoice_id: string;
+  amount: number;
+  method: string;
+  reference: string | null;
+  paid_at: string;
+  created_at: string;
+}
+
+export interface CustomerCreditAccount {
+  customer_id: string;
+  currency: string;
+  credit_limit: number;
+  outstanding_balance: number;
+  available_credit: number;
+}
+
+export interface CustomerLedgerEntry {
+  id: string;
+  reference: string | null;
+  description: string;
+  debit: number;
+  credit: number;
+  due_date: string | null;
+  status: string;
+  created_at: string;
+}
+
+function asNumber(value: unknown, label: string): number {
+  const number = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(number)) throw new Error(`${label} غير صالح.`);
+  return number;
+}
+
+function assertTemplateLine(value: unknown): OrderTemplateLine {
+  if (!value || typeof value !== 'object') throw new Error('بيانات قالب الطلب غير صالحة.');
+  const item = value as Record<string, unknown>;
+  if (typeof item.product_id !== 'string' || !UUID.test(item.product_id)) throw new Error('معرّف منتج القالب غير صالح.');
+  const quantity = asNumber(item.quantity, 'كمية القالب');
+  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10000) throw new Error('كمية القالب خارج النطاق المسموح.');
+  for (const key of ['sku', 'name', 'unit']) if (typeof item[key] !== 'string' || !String(item[key]).trim()) throw new Error('بيانات منتج القالب ناقصة.');
+  return { product_id: item.product_id, sku: item.sku as string, name: item.name as string, unit: item.unit as string, quantity };
+}
+
+function mapTemplate(value: unknown): OrderTemplate {
+  if (!value || typeof value !== 'object') throw new Error('استجابة القالب غير صالحة.');
+  const item = value as Record<string, unknown>;
+  if (typeof item.id !== 'string' || !UUID.test(item.id) || typeof item.name !== 'string' || !item.name.trim()) throw new Error('هوية القالب غير صالحة.');
+  if (typeof item.created_at !== 'string' || typeof item.updated_at !== 'string') throw new Error('تاريخ القالب غير صالح.');
+  const rawLines = Array.isArray(item.lines) ? item.lines : [];
+  return { id: item.id, name: item.name, branch_label: typeof item.branch_label === 'string' ? item.branch_label : null, lines: rawLines.map(assertTemplateLine), created_at: item.created_at, updated_at: item.updated_at };
+}
+
+export async function getOrderTemplates(): Promise<OrderTemplate[]> {
+  const { data, error } = await requireSupabase().from('order_templates').select('id,name,branch_label,lines,created_at,updated_at').order('updated_at', { ascending: false }).limit(100);
+  if (error) throw error;
+  return (data ?? []).map(mapTemplate);
+}
+
+export async function createOrderTemplate(name: string, lines: OrderTemplateLine[], branchLabel?: string | null): Promise<OrderTemplate> {
+  const cleanName = name.trim();
+  if (cleanName.length < 1 || cleanName.length > 120) throw new Error('اسم القالب يجب أن يكون بين 1 و120 حرفًا.');
+  if (!lines.length || lines.length > 200) throw new Error('القالب يجب أن يحتوي على منتج واحد على الأقل.');
+  const safeLines = lines.map(assertTemplateLine);
+  const client = requireSupabase();
+  const { data: profile, error: profileError } = await client.from('profiles').select('customer_id').eq('id', (await client.auth.getUser()).data.user?.id ?? '').single();
+  if (profileError) throw profileError;
+  if (!profile.customer_id) throw new Error('الحساب الحالي غير مرتبط بعميل.');
+  const { data, error } = await client.from('order_templates').insert({ customer_id: profile.customer_id, name: cleanName, branch_label: branchLabel?.trim() || null, lines: safeLines }).select('id,name,branch_label,lines,created_at,updated_at').single();
+  if (error) throw error;
+  return mapTemplate(data);
+}
+
+export async function deleteOrderTemplate(id: string) {
+  if (!UUID.test(id)) throw new Error('معرّف القالب غير صالح.');
+  const { error } = await requireSupabase().from('order_templates').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function getCustomerInvoices(): Promise<CustomerInvoice[]> {
+  const { data, error } = await requireSupabase().from('operational_invoices').select('id,invoice_number,order_id,customer_id,status,currency,subtotal,total,due_at,created_at').order('created_at', { ascending: false }).limit(100);
+  if (error) throw error;
+  return (data ?? []).map((item) => ({ ...item, invoice_number: asNumber(item.invoice_number, 'رقم الفاتورة'), subtotal: asNumber(item.subtotal, 'الإجمالي الفرعي'), total: asNumber(item.total, 'إجمالي الفاتورة') })) as CustomerInvoice[];
+}
+
+export async function getInvoiceLines(invoiceId: string): Promise<InvoiceLine[]> {
+  if (!UUID.test(invoiceId)) throw new Error('معرّف الفاتورة غير صالح.');
+  const { data, error } = await requireSupabase().from('operational_invoice_items').select('id,product_id,description,quantity,unit_price,line_total').eq('invoice_id', invoiceId).order('created_at');
+  if (error) throw error;
+  return (data ?? []).map((item) => ({ ...item, quantity: asNumber(item.quantity, 'كمية الفاتورة'), unit_price: asNumber(item.unit_price, 'سعر الفاتورة'), line_total: asNumber(item.line_total, 'إجمالي السطر') })) as InvoiceLine[];
+}
+
+export async function getCustomerPayments(): Promise<CustomerPayment[]> {
+  const { data, error } = await requireSupabase().rpc('get_customer_payments');
+  if (error) throw error;
+  return (data ?? []).map((item) => ({ ...item, amount: asNumber(item.amount, 'مبلغ الدفعة') })) as CustomerPayment[];
+}
+
+export async function getCustomerCredit(): Promise<CustomerCreditAccount | null> {
+  const client = requireSupabase();
+  const { data, error } = await client.from('customer_credit_accounts').select('customer_id,currency,credit_limit,outstanding_balance,available_credit').maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { ...data, credit_limit: asNumber(data.credit_limit, 'حد الائتمان'), outstanding_balance: asNumber(data.outstanding_balance, 'الرصيد المستحق'), available_credit: asNumber(data.available_credit, 'الرصيد المتاح') };
+}
+
+export async function getCustomerLedger(): Promise<CustomerLedgerEntry[]> {
+  const { data, error } = await requireSupabase().from('customer_ledger_entries').select('id,reference,description,debit,credit,due_date,status,created_at').order('created_at', { ascending: false }).limit(100);
+  if (error) throw error;
+  return (data ?? []).map((item) => ({ ...item, debit: asNumber(item.debit, 'مدين'), credit: asNumber(item.credit, 'دائن') })) as CustomerLedgerEntry[];
+}
+
+export async function getCustomerAccount() {
+  const client = requireSupabase();
+  const { data: userData, error: userError } = await client.auth.getUser();
+  if (userError) throw userError;
+  if (!userData.user) throw new Error('يلزم تسجيل الدخول.');
+  const { data: profile, error: profileError } = await client.from('profiles').select('customer_id,organization_id,role').eq('id', userData.user.id).single();
+  if (profileError) throw profileError;
+  const [{ data: customer, error: customerError }, { data: organization, error: organizationError }] = await Promise.all([
+    profile.customer_id ? client.from('customers').select('id,name,phone,tier,is_active').eq('id', profile.customer_id).single() : Promise.resolve({ data: null, error: null }),
+    client.from('organizations').select('id,name,is_active').eq('id', profile.organization_id).single()
+  ]);
+  if (customerError) throw customerError;
+  if (organizationError) throw organizationError;
+  return { profile, customer, organization };
+}
+
+export async function applyTemplateToCart(lines: OrderTemplateLine[]) {
+  const safeLines = lines.map(assertTemplateLine);
+  if (!safeLines.length) throw new Error('القالب فارغ.');
+  const { data, error } = await requireSupabase().rpc('set_cart_items', { p_items: safeLines.map((line) => ({ product_id: line.product_id, quantity: line.quantity })) });
+  if (error) throw error;
+  if (!Array.isArray(data)) throw new Error('تعذر التحقق من السلة بعد تطبيق القالب.');
+  return data;
+}
