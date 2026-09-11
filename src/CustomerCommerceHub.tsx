@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import readXlsxFile from 'read-excel-file';
-import type { CartLine, Product } from './domain/types';
+import { readSheet } from 'read-excel-file/browser';
+import type { CartLine } from './domain/types';
 import { formatMoney } from './domain/pricing';
 import { getCatalog } from './services/catalog';
 import { setCartItems } from './services/cart';
@@ -83,7 +83,8 @@ export default function CustomerCommerceHub({ cart, onCartRefresh, customerId, w
     if (!file) return;
     setQuickBusy(true); setError(null); setMessage(null); setQuickRows([]);
     try {
-      const rows = await readXlsxFile(file);
+      if (!file.name.toLowerCase().endsWith('.xlsx')) throw new Error('صيغة الملف المدعومة هي XLSX فقط.');
+      const rows = await readSheet(file);
       if (!rows.length) throw new Error('ملف Excel فارغ.');
       const headers = rows[0].map(normalizeHeader);
       const skuIndex = headers.findIndex((h) => ['sku','productsku','رمزالمنتج','الرمز','كودالمنتج','الباركود'].includes(h));
@@ -113,10 +114,11 @@ export default function CustomerCommerceHub({ cart, onCartRefresh, customerId, w
         const product = (r.sku && bySku.get(r.sku.toLowerCase())) ?? (r.name && byName.get(r.name.toLowerCase()));
         if (r.quantity === null) return { row: r.row, sku: r.sku, quantity: 0, error: 'الكمية غير صحيحة.' };
         if (!product) return { row: r.row, sku: r.sku || r.name, quantity: r.quantity, error: 'المنتج غير موجود أو غير مصرح به.' };
-        if (seen.has(product.id)) return { row: r.row, sku: product.sku, quantity: r.quantity, product: { id: product.id, name: product.name, sku: product.sku, unit: product.unit, available: product.available_quantity }, error: 'المنتج مكرر في الملف.' };
+        const productView = { id: product.id, name: product.name, sku: product.sku, unit: product.unit, available: product.available_quantity };
+        if (seen.has(product.id)) return { row: r.row, sku: product.sku, quantity: r.quantity, product: productView, error: 'المنتج مكرر في الملف.' };
         seen.add(product.id);
-        if (product.available_quantity < r.quantity) return { row: r.row, sku: product.sku, quantity: r.quantity, product: { id: product.id, name: product.name, sku: product.sku, unit: product.unit, available: product.available_quantity }, error: `المتاح ${product.available_quantity} فقط.` };
-        return { row: r.row, sku: product.sku, quantity: r.quantity, product: { id: product.id, name: product.name, sku: product.sku, unit: product.unit, available: product.available_quantity } };
+        if (product.available_quantity < r.quantity) return { row: r.row, sku: product.sku, quantity: r.quantity, product: productView, error: `المتاح ${product.available_quantity} فقط.` };
+        return { row: r.row, sku: product.sku, quantity: r.quantity, product: productView };
       });
       setQuickRows(validated); setMessage(`تمت قراءة ${validated.length} صفًا. راجع النتائج قبل التأكيد.`);
     } catch (e) { setError(e instanceof Error ? e.message : 'تعذر قراءة ملف Excel.'); }
@@ -146,7 +148,7 @@ export default function CustomerCommerceHub({ cart, onCartRefresh, customerId, w
       </div>
       <div className="portal-card" id="quick-order">
         <div className="section-heading"><div><span className="eyebrow">Quick Order</span><h2>طلب سريع من Excel</h2></div></div>
-        <label className="file-picker">اختر ملف Excel (.xlsx)<input type="file" accept=".xlsx,.xls" onChange={(e) => void parseQuickOrder(e)} disabled={quickBusy} /></label>
+        <label className="file-picker">اختر ملف Excel (.xlsx)<input type="file" accept=".xlsx" onChange={(e) => void parseQuickOrder(e)} disabled={quickBusy} /></label>
         {quickBusy && <div className="loading-state">جارٍ تحليل الملف والتحقق من المنتجات…</div>}
         {!!quickRows.length && <><div className="portal-table"><div className="portal-table-head"><span>الصف</span><span>SKU</span><span>المنتج</span><span>الكمية</span><span>التحقق</span></div>{quickRows.map((row) => <div className="portal-table-row" key={row.row}><span>{row.row}</span><span>{row.sku}</span><span>{row.product?.name ?? '—'}</span><span>{row.quantity}</span><span className={row.error ? 'validation-error' : 'validation-ok'}>{row.error ?? 'صالح'}</span></div>)}</div><button className="checkout" disabled={quickBusy || !quickRows.some((row) => row.product && !row.error)} onClick={() => void confirmQuickOrder()}>تأكيد الأصناف الصالحة وإلى السلة</button></>}
       </div>
