@@ -39,25 +39,33 @@
 
 ## 2026-09-11 — Admin catalog / inventory / purchasing hardening
 
-- Admin product lifecycle now exposes real DB-backed product records with edit, activate/deactivate, search, status filter, pagination, category selection, and tier pricing through existing server-authoritative RPCs.
-- Admin order operations now expose search/filter/pagination while retaining server-authoritative state transitions.
+- Admin product lifecycle exposes real DB-backed product records with edit, activate/deactivate, search, status filter, pagination, category selection, and tier pricing through existing server-authoritative RPCs.
+- Admin order operations expose search/filter/pagination while retaining server-authoritative state transitions.
 - Corrected an AdminPanel product query from obsolete `is_active` to the current schema field `status`.
-- Inventory service contracts now reject fractional, unsafe, negative, or oversized quantities before RPC execution; inventory threshold and transfer validation remain server-authoritative after client validation.
-- Added adversarial unit coverage for inventory transfer/threshold inputs and purchasing order/receiving inputs.
+- Inventory service contracts reject fractional, unsafe, negative, or oversized quantities before RPC execution; inventory threshold and transfer validation remain server-authoritative after client validation.
 - Purchasing remains wired to real supplier, purchase-order, approval, and receiving RPCs; no mock persistence was introduced.
 - Existing order concurrency hardening remains present through deterministic locking and idempotency at the database command layer.
 
+## 2026-09-11 — Finance + adversarial contract execution
+
+- Added finance service-level adversarial coverage for payment, cash-account, and expense input contracts.
+- Added cross-domain adversarial coverage for inventory transfer/threshold validation, purchase-order/receiving batches, and malformed staff-order responses.
+- The new tests explicitly exercise malformed UUIDs, zero/negative/non-finite amounts, unsupported payment methods/currencies, duplicate lines, fractional quantities, invalid threshold relationships, short idempotency keys, and malformed order response shapes.
+- Finance operations remain backed by the existing server RPCs (`create_cash_account`, `create_invoice_from_order`, `record_payment`, `record_expense`); no client-only financial mutation was introduced.
+- The live Supabase schema currently contains the operational finance tables (`operational_invoices`, `operational_invoice_items`, `payments`, `cash_transactions`, `expenses`, `customer_credit_accounts`, `customer_ledger_entries`) with RLS enabled.
+
 ### Exact implementation lineage
-- Prior DAY 2 implementation head: `1526ecca26450c2a08a09e13095cc19759c12bd2`.
-- Inventory hardening commit: `f68707a8f3e2931bdee1faf77783872149b631a8`.
-- Inventory adversarial tests commit: `40dfeaf9348652d456dd8c552b7d5f74381a21a0`.
-- Purchasing adversarial tests commit: `ea4a3a7a89941720472a00fd49839c6b7eac7f21`.
-- Latest evidence-log update follows those implementation commits.
+- Starting DAY 2 reference supplied by owner: `d1cf83a170a08b65a1f83c7e9fea62e7782bc01b`.
+- Current executable branch: `day2/complete-product`.
+- Current branch head after this round: `44ccc7f83aa76bb5a6683496f07f22e80d989ca8`.
+- Finance adversarial tests: `8cfc388335ece4bb45cf6b7ba3db26bb0fa25ea1`.
+- Evidence update: current file commit follows the finance/adversarial implementation.
 
 ### Verification status
-- CI is monitored by exact SHA; no PASS is claimed until the runner completes successfully for the exact target SHA.
-- No Production modification or promotion was performed.
-- Vercel capacity/rate limiting remains an external deployment blocker and is not treated as a code/build PASS.
+- The GitHub status observed on the prior exact SHA contained only Vercel deployment rate-limit failures; these are external provider statuses and are not treated as application build/test failures.
+- No automated PASS is claimed for the new test commit until an actual runner reports success on that exact SHA.
+- Supabase security advisor currently reports 47 authenticated-callable `SECURITY DEFINER` functions and one leaked-password-protection warning. These are recorded as security evidence/blockers, not silently converted to PASS.
+- Production was not modified or promoted by this DAY 2 work.
 
 ## Next execution front
-Admin finance/inventory/purchasing edge-flow audit → refund/cancellation/payment consistency → adversarial authorization and concurrency proof → Clean Replay/Test 021 → authenticated browser E2E across Chrome/Edge/Firefox/mobile → regression/gap rescan → final evidence pack.
+Finance mutation consistency → cancellation/refund capability audit against the actual DB contract → concurrency/idempotency adversarial proof → Clean Replay/Test 021 → authenticated browser E2E across Chrome/Edge/Firefox/mobile → regression/gap rescan → final evidence pack and certification gates.
