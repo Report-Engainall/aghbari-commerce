@@ -8,6 +8,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const CURRENCY_PATTERN = /^[A-Z]{3}$/;
 const PAYMENT_METHODS = new Set(['cash', 'bank_transfer', 'card', 'other']);
 const MAX_MONEY = Number.MAX_SAFE_INTEGER;
+const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
 function requireString(value: unknown, field: string): string {
   if (typeof value !== 'string') throw new Error(`${field} يجب أن يكون نصًا.`);
@@ -31,7 +32,13 @@ function requireCurrency(value: unknown): string {
   return normalized;
 }
 
-export function validatePaymentInput(invoiceId: string, amount: number, method: string, cashAccountId: string | null, reference: string): void {
+function requireIdempotencyKey(value: unknown): string {
+  const normalized = requireString(value, 'مفتاح العملية').trim();
+  if (!normalized || normalized.length > MAX_IDEMPOTENCY_KEY_LENGTH) throw new Error('مفتاح العملية غير صالح.');
+  return normalized;
+}
+
+export function validatePaymentInput(invoiceId: string, amount: number, method: string, cashAccountId: string | null, reference: string, idempotencyKey: string): void {
   requireUuid(invoiceId, 'الفاتورة');
   requirePositiveAmount(amount, 'مبلغ الدفع');
   const normalizedMethod = requireString(method, 'طريقة الدفع').trim();
@@ -39,6 +46,7 @@ export function validatePaymentInput(invoiceId: string, amount: number, method: 
   if (cashAccountId !== null) requireUuid(cashAccountId, 'حساب النقدية');
   const normalizedReference = requireString(reference, 'مرجع الدفع');
   if (normalizedReference.length > 200) throw new Error('مرجع الدفع طويل جدًا.');
+  requireIdempotencyKey(idempotencyKey);
 }
 
 export function validateExpenseInput(branchId: string, cashAccountId: string, category: string, amount: number, currency: string, description: string): void {
@@ -83,9 +91,9 @@ export async function createInvoiceFromOrder(orderId: string) {
   if (error) throw error;
   return data as OperationalInvoice;
 }
-export async function recordPayment(invoiceId: string, amount: number, method: 'cash'|'bank_transfer'|'card'|'other', cashAccountId: string | null, reference: string) {
-  validatePaymentInput(invoiceId, amount, method, cashAccountId, reference);
-  const { data, error } = await requireSupabase().rpc('record_payment',{p_invoice_id:invoiceId.trim(),p_amount:amount,p_method:method,p_cash_account_id:cashAccountId?.trim() ?? null,p_reference:reference.trim()||null});
+export async function recordPayment(invoiceId: string, amount: number, method: 'cash'|'bank_transfer'|'card'|'other', cashAccountId: string | null, reference: string, idempotencyKey: string) {
+  validatePaymentInput(invoiceId, amount, method, cashAccountId, reference, idempotencyKey);
+  const { data, error } = await requireSupabase().rpc('record_payment',{p_invoice_id:invoiceId.trim(),p_amount:amount,p_method:method,p_cash_account_id:cashAccountId?.trim() ?? null,p_reference:reference.trim()||null,p_idempotency_key:idempotencyKey.trim()});
   if (error) throw error;
   return data;
 }
