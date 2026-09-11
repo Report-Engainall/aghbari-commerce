@@ -36,5 +36,21 @@
 - The Vercel provider status for the branch commits remains a deployment-rate-limit failure; this is not treated as an application build result.
 - No automated PASS is asserted until a real TypeScript/test/lint/build runner completes.
 
+## 2026-09-11 — Admin customer-flow follow-through
+
+- Added real customer editing through the existing server RPC `update_customer`; no client-only mutation is used.
+- Added customer search across name/phone/email.
+- Added active/inactive filtering.
+- Added deterministic client-side pagination for the retrieved customer set.
+- Added edit validation for name/phone/tier at the service boundary and verified the existing server RPC remains the mutation authority.
+- Added service-level tests covering valid normalization, blank-name rejection, oversized-phone rejection, and invalid-tier rejection.
+
+### Current verification evidence
+- Branch head after implementation/test additions: `af2b20d8a8c6bb2e9db56ae7e3a5bdc8466584e5`.
+- GitHub Actions has started on this exact SHA; the observed `supabase-migration-proof` run is queued and is not yet a PASS.
+- An `Order Workflow Proof` run for the immediately preceding SHA `809139512faaa77db84aa3f4e5fa48fcafa7da8a` reached `in_progress`; no PASS is claimed before completion.
+- No local runner evidence is claimed because the execution environment cannot reach GitHub/npm to reproduce the repository install.
+- Production remains untouched.
+
 ## Next execution front
-Admin business-flow gap scan → remaining real mutations/exports/search/filter/pagination gaps → adversarial tests → Clean Replay/Test 021 → authenticated browser E2E.
+Admin product/category business-flow closure → order operational detail/search/filter/pagination audit → finance/inventory/purchasing mutation audit → adversarial authorization/concurrency tests → Clean Replay/Test 021 → authenticated browser E2E across Chrome/Edge/Firefox/mobile.
