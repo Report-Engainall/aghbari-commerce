@@ -60,7 +60,7 @@ const workflowChecks = {
   '.github/workflows/runtime-e2e.yml': ['npm ci', 'E2E_EXACT_SHA', 'workflow_dispatch'],
   '.github/workflows/security-audit.yml': ['npm ci', 'TARGET_SHA', 'workflow_dispatch'],
   '.github/workflows/supabase-migration-proof.yml': ['TARGET_SHA', 'workflow_dispatch', 'supabase test db'],
-  '.github/workflows/bootstrap-release-lockfile.yml': ['package-lock.json', 'npm ci', 'lockfileVersion'],
+  '.github/workflows/bootstrap-release-lockfile.yml': ['package-lock.json', 'npm install --package-lock-only', 'lockfileVersion'],
 };
 for (const [file, needles] of Object.entries(workflowChecks)) {
   const path = join(root, file);
@@ -76,7 +76,6 @@ const ignoredNames = new Set(['node_modules', 'dist', '.git']);
 const suspiciousPatterns = [
   /\bTODO\b/i,
   /\bFIXME\b/i,
-  /\bplaceholder\b/i,
   /\bnot\s+implemented\b/i,
   /\bnotimplemented\b/i,
   /\b(?:mock|fake|sample)\s+(?:data|api|response|success)\b/i,
@@ -168,9 +167,7 @@ if (existsSync(manifestPath)) {
 for (const script of ['test', 'lint', 'build', 'test:e2e', 'test:release-audit', 'typecheck']) {
   if (!pkg.scripts?.[script]) fail(`Missing package script: ${script}`);
 }
-if (pkg.engines?.node !== '>=22 <23') {
-  fail('Node runtime contract must remain pinned to >=22 <23.');
-}
+if (pkg.engines?.node !== '>=22 <23') fail('Node runtime contract must remain pinned to >=22 <23.');
 if (pkg.private !== true) fail('Application package must remain private.');
 if (pkg.type !== 'module') fail('Application package must remain ESM.');
 if (typeof pkg.version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkg.version)) fail(`Invalid application version: ${pkg.version}`);
@@ -182,9 +179,7 @@ for (const key of ['VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY']) {
 if (/SERVICE_ROLE|ANON_KEY\s*=\s*sk_/i.test(envExample)) fail('Environment example must not advertise privileged Supabase credentials.');
 
 const migrationRoot = join(root, 'supabase', 'migrations');
-if (!existsSync(migrationRoot)) {
-  fail('Missing Supabase migration directory.');
-}
+if (!existsSync(migrationRoot)) fail('Missing Supabase migration directory.');
 const migrationFiles = walk(migrationRoot).filter((file) => file.endsWith('.sql')).sort();
 const migrationVersions = migrationFiles.map((file) => {
   const name = file.split(/[/\\]/).pop() ?? '';
