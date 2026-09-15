@@ -21,7 +21,7 @@ insert into public.products(id,organization_id,sku,name,unit,status) values
 set local role service_role;
 insert into storage.objects(bucket_id,name,owner_id,metadata) values
  ('product-media','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa21.webp','11111111-1111-4111-8111-111111111111','{"mimetype":"image/webp","size":1024}'::jsonb),
- ('product-media','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1/bbbbbbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1.webp','22222222-2222-4222-8222-222222222222','{"mimetype":"image/webp","size":1024}'::jsonb),
+ ('product-media','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2.webp','22222222-2222-4222-8222-222222222222','{"mimetype":"image/webp","size":1024}'::jsonb),
  ('product-media','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa99/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa29.webp','11111111-1111-4111-8111-111111111111','{"mimetype":"image/webp","size":1024}'::jsonb);
 select results_eq($$select public from storage.buckets where id='product-media'$$,$$values (false)$$,'Product media bucket is private');
 select results_eq($$select file_size_limit from storage.buckets where id='product-media'$$,$$values (5242880::bigint)$$,'Product media bucket enforces the 5 MiB server-side limit');
@@ -40,15 +40,16 @@ select throws_ok($$insert into storage.objects(bucket_id,name,owner_id,metadata)
 select throws_ok($$select public.register_product_media('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11'::uuid,'','image/webp',1200,900,2048)$$,'22023',null,'Empty registration path is rejected by the application contract');
 select results_eq($$select count(*) from storage.objects where name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa99/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa29.webp'$$,$$values (0::bigint)$$,'Orphan product path is not readable');
 select throws_ok($$insert into storage.objects(bucket_id,name,owner_id,metadata) values ('product-media','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa33.webp','11111111-1111-4111-8111-111111111111','{"mimetype":"image/webp","size":2048}'::jsonb)$$,'42501',null,'Tenant A cannot upload into Tenant B organization prefix');
-select results_eq($$with changed as (update storage.objects set name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa34.webp' where name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa21.webp' returning 1) select count(*) from changed$$,$$values (0::bigint)$$,'Denied direct storage UPDATE affects zero rows');
+select results_eq($$with changed as (update storage.objects set name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa34.webp' where name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa21.webp' returning 1) select count(*) from changed$$,$$values (0::bigint)$$,'Denied direct storage UPDATE affects zero rows');
 select results_eq($$select count(*) from storage.objects where name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa21.webp'$$,$$values (1::bigint)$$,'Denied UPDATE leaves the original object unchanged');
 select lives_ok($$select public.register_product_media('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11'::uuid,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa31.webp','image/webp',1200,900,2048)$$,'Server registers a valid owned WebP object');
-select throws_ok($$select public.register_product_media('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1'::uuid,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/bbbbbbbb-bbbb-4bbb-8bbb-222222222222.webp','image/webp',1200,900,2048)$$,'42501',null,'Server rejects a product from another tenant');
+select throws_ok($$select public.register_product_media('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1'::uuid,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2.webp','image/webp',1200,900,2048)$$,'42501',null,'Server rejects a product from another tenant');
 select throws_ok($$select public.register_product_media('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11'::uuid,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa21.webp','image/png',1200,900,1024)$$,'22023',null,'Server registration accepts only canonical WebP');
 select throws_ok($$delete from storage.objects where name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa31.webp'$$,'42501',null,'Direct SQL deletion is blocked by the Storage protection trigger');
 
 select set_config('request.jwt.claims',json_build_object('role','authenticated','sub','22222222-2222-4222-8222-222222222222')::text,false);
 select set_config('request.jwt.claim.role','authenticated',false);
+select set_config('request.jwt.claim.sub','22222222-bbbb-4222-8222-222222222222',false);
 select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',false);
 select results_eq($$select count(*) from storage.objects where bucket_id='product-media'$$,$$values (1::bigint)$$,'Tenant B sees only its own active product media');
 
