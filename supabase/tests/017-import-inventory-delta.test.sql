@@ -1,5 +1,6 @@
 begin;
 
+create extension if not exists pgtap with schema extensions;
 select plan(6);
 
 create temp table fixture as select gen_random_uuid() org_id, gen_random_uuid() admin_id, gen_random_uuid() branch_id, gen_random_uuid() warehouse_id;
