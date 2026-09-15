@@ -10,7 +10,7 @@ values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'Purchasing Tenant A');
 insert into public.branches (id, organization_id, name)
 values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'Main Branch');
 insert into public.warehouses (id, organization_id, branch_id, name)
-values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'Main Warehouse');
+values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01', 'Main Warehouse');
 insert into public.products (id, organization_id, sku, name, unit)
 values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'R5-001', 'Rice', 'carton');
 insert into public.customers (id, organization_id, name, tier)
