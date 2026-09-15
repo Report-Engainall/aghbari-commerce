@@ -1,0 +1,42 @@
+name: F31 mutation proof
+
+on:
+  push:
+    branches:
+      - 'war-room/**'
+  workflow_dispatch:
+
+jobs:
+  f31-mutation-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Verify exact HEAD
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+      - name: Start local Supabase
+        run: supabase start
+      - name: Baseline full contract suite MUST PASS
+        run: supabase test db --local
+      - name: Inject real defects and require the same assertions to FAIL
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp war-room/f31/f31-mutation-probe.sql supabase/tests/999-f31-mutation-probe.test.sql
+          set +e
+          supabase test db --local > f31-mutation.log 2>&1
+          status=$?
+          set -e
+          test "$status" -ne 0
+          grep -q 'F31 tenant injected defect MUST FAIL' f31-mutation.log
+          grep -q 'F31 inventory injected defect MUST FAIL' f31-mutation.log
+          grep -q 'F31 storage injected defect MUST FAIL' f31-mutation.log
+      - name: Restore clean tree and prove baseline PASS again
+        run: |
+          rm -f supabase/tests/999-f31-mutation-probe.test.sql
+          supabase test db --local
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
