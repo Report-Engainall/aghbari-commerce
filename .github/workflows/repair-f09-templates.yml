@@ -1,0 +1,62 @@
+name: repair-f09-templates
+
+on:
+  push:
+    branches: ['certification/120m-recovery-726']
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ !contains(github.event.head_commit.message, 'fix(templates): cloud source of truth') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: certification/120m-recovery-726
+      - name: Patch App template integration
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/App.tsx')
+          s = p.read_text()
+          s = s.replace("import { getCustomerOrders, type CustomerOrderSummary } from './services/customerOrders';", "import { getCustomerOrders, type CustomerOrderSummary } from './services/customerOrders';\nimport { applyOrderTemplate, createOrderTemplate, deleteOrderTemplate, getOrderTemplates } from './services/orderTemplates';")
+          s = s.replace("function readLocalTemplates(customerId: string): OrderTemplate[] { try { return JSON.parse(localStorage.getItem(`aghbari:templates:${customerId}`) ?? '[]') as OrderTemplate[]; } catch { return []; } }\nfunction writeLocalTemplates(customerId: string, templates: OrderTemplate[]) { localStorage.setItem(`aghbari:templates:${customerId}`, JSON.stringify(templates)); }\n", "")
+          s = s.replace("      setTemplates(readLocalTemplates(profile.customer_id));", "      try { setTemplates(await getOrderTemplates()); } catch (error) { setRuntimeError(error instanceof Error ? error.message : 'تعذر تحميل المسحات من قاعدة البيانات.'); setTemplates([]); }")
+          old_save = "  async function saveTemplate() { if (!customerId || !cart.length || !templateName.trim()) return; const template: OrderTemplate = { id: crypto.randomUUID(), name: templateName.trim(), branchLabel: 'الفرع الرئيسي', lines: cart.map((line) => ({ productId: line.product.id, sku: line.product.sku, name: line.product.name, unit: line.product.unit, quantity: line.quantity })), updatedAt: new Date().toISOString() }; const next = [template, ...templates].slice(0, 30); setTemplates(next); writeLocalTemplates(customerId, next); setTemplateName(''); setRuntimeError(null); }"
+          new_save = "  async function saveTemplate() { if (!cart.length || !templateName.trim()) return; try { await createOrderTemplate({ name: templateName.trim(), branchLabel: 'الفرع الرئيسي', lines: cart.map((line) => ({ productId: line.product.id, sku: line.product.sku, name: line.product.name, unit: line.product.unit, quantity: line.quantity })) }); setTemplates(await getOrderTemplates()); setTemplateName(''); setRuntimeError(null); } catch (error) { setRuntimeError(error instanceof Error ? error.message : 'تعذر حفظ المسحة في قاعدة البيانات.'); } }"
+          if old_save not in s: raise SystemExit('F09 saveTemplate pattern not found')
+          s = s.replace(old_save, new_save)
+          old_apply = "  async function applyTemplate(template: OrderTemplate) { for (const line of template.lines) { const product = products.find((item) => item.id === line.productId); if (product) await addToCart(product, Math.min(line.quantity, product.availableQuantity)); } setSection('catalog'); }"
+          new_apply = "  async function applyTemplate(template: OrderTemplate) { if (!warehouseId) { setRuntimeError('لا يوجد مستودع نشط لتطبيق المسحة.'); return; } try { await applyOrderTemplate(template.id, warehouseId); const savedCart = await getCart(); setCart(savedCart.map((item) => ({ product: products.find((product) => product.id === item.product_id) ?? { id: item.product_id, sku: item.sku, name: item.name, unit: item.unit, category: 'أصناف', availableQuantity: 0, status: 'active' }, quantity: item.quantity, unitPrice: item.authorized_price ?? 0 }))); setSection('catalog'); setRuntimeError(null); } catch (error) { setRuntimeError(error instanceof Error ? error.message : 'تعذر تطبيق المسحة.'); } }"
+          if old_apply not in s: raise SystemExit('F09 applyTemplate pattern not found')
+          s = s.replace(old_apply, new_apply)
+          old_delete = "onClick={() => { const next = templates.filter((item) => item.id !== template.id); setTemplates(next); if (customerId) writeLocalTemplates(customerId, next); }}"
+          new_delete = "onClick={() => void (async () => { try { await deleteOrderTemplate(template.id); setTemplates(await getOrderTemplates()); setRuntimeError(null); } catch (error) { setRuntimeError(error instanceof Error ? error.message : 'تعذر حذف المسحة.'); } })()}"
+          if old_delete not in s: raise SystemExit('F09 delete pattern not found')
+          s = s.replace(old_delete, new_delete)
+          if 'localStorage' in s: raise SystemExit('F09 repair incomplete: localStorage remains in App.tsx')
+          p.write_text(s)
+          PY
+      - name: Verify isolated repair
+        shell: bash
+        run: |
+          test -f src/services/orderTemplates.ts
+          grep -q "getOrderTemplates" src/App.tsx
+          grep -q "createOrderTemplate" src/App.tsx
+          grep -q "applyOrderTemplate" src/App.tsx
+          grep -q "deleteOrderTemplate" src/App.tsx
+          ! grep -q "localStorage" src/App.tsx
+      - name: Commit isolated repair
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/App.tsx
+          git diff --cached --quiet && { echo 'No repair diff remains'; exit 0; }
+          git commit -m 'fix(templates): cloud source of truth'
+          git push origin HEAD:certification/120m-recovery-726
