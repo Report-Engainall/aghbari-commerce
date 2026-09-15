@@ -1,0 +1,29 @@
+name: F31 Exact Candidate Mutation Proof
+
+on:
+  push:
+    branches:
+      - 'war-room/master-parallel-efb'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  f31-harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Exact candidate checkout
+        run: |
+          git fetch --all --tags --prune
+          git checkout --detach efb30b3d23a7a9fcef22d028c33017eeab0855af
+          test "$(git rev-parse HEAD)" = "efb30b3d23a7a9fcef22d028c33017eeab0855af"
+      - name: Verify real F31 harness exists
+        run: |
+          test -f .github/workflows/f31-mutation-proof.yml
+          test -f war-room/f31/f31-mutation-probe.test.sql
+          grep -q 'MUST FAIL' war-room/f31/f31-mutation-probe.test.sql
+          grep -q 'ROLLBACK' war-room/f31/f31-mutation-probe.test.sql
