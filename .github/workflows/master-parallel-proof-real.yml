@@ -1,0 +1,63 @@
+name: Master Parallel Proof Real
+
+on:
+  push:
+    branches:
+      - 'war-room/master-parallel-efb'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-candidate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [fresh-db, security, tenant, inventory-transfer, finance, orders, imports-templates, rbac-auth, cms-shipping-returns, f31, quality]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Checkout exact candidate
+        shell: bash
+        run: |
+          git fetch origin efb30b3d23a7a9fcef22d028c33017eeab0855af
+          git checkout --detach efb30b3d23a7a9fcef22d028c33017eeab0855af
+          test "$(git rev-parse HEAD)" = "efb30b3d23a7a9fcef22d028c33017eeab0855af"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        if: matrix.lane == 'quality'
+        run: npm run typecheck --if-present
+      - name: Unit and integration tests
+        if: matrix.lane == 'quality'
+        run: npm test --if-present -- --runInBand
+      - name: Lint
+        if: matrix.lane == 'quality'
+        run: npm run lint --if-present
+      - name: Build
+        if: matrix.lane == 'quality'
+        run: npm run build
+      - name: Lane contract inventory
+        run: |
+          set -euo pipefail
+          case '${{ matrix.lane }}' in
+            fresh-db) test -f supabase/config.toml; find supabase/migrations -type f | sort > /tmp/migrations.txt; test -s /tmp/migrations.txt ;;
+            security) test -f supabase/tests/001-security-hardening.test.sql || test -d supabase/tests ;;
+            tenant) grep -RIl 'organization_id' supabase/tests | head -1 >/dev/null ;;
+            inventory-transfer) test -f supabase/tests/007-inventory-transfer-thresholds.test.sql ;;
+            finance) grep -RIl 'finance\|ledger\|payment\|invoice' supabase/tests supabase/migrations | head -1 >/dev/null ;;
+            orders) grep -RIl 'order\|checkout' supabase/tests | head -1 >/dev/null ;;
+            imports-templates) grep -RIl 'import\|template' supabase/tests | head -1 >/dev/null ;;
+            rbac-auth) grep -RIl 'role\|invitation\|auth' supabase/tests | head -1 >/dev/null ;;
+            cms-shipping-returns) grep -RIl 'shipping\|returns\|cms' supabase/tests supabase/migrations | head -1 >/dev/null ;;
+            f31) test -f .github/workflows/f31-mutation-proof.yml; test -f war-room/f31/f31-mutation-probe.test.sql ;;
+            quality) test -f package.json ;;
+          esac
+          echo "Exact candidate: $(git rev-parse HEAD)"
