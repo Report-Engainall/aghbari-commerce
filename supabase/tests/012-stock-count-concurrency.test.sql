@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(3);
+select plan(5);
 
 insert into auth.users (id, email) values ('21212121-2121-4121-8121-212121212121', 'stock-count-concurrency@test.local');
 insert into public.organizations (id, name) values ('22222222-2222-4222-8222-222222222222', 'Stock Count Concurrency Tenant');
@@ -42,6 +42,12 @@ select throws_ok(
   $$select public.set_stock_count_line((select id from public.stock_count_sessions where organization_id='22222222-2222-4222-8222-222222222222' and status='completed'),'25252525-2525-4252-8252-252525252525',13)$$,
   '22023','stock count is not open',
   'Completed stock counts cannot be modified'
+);
+
+select is(
+  (select quantity from public.inventory_balances where warehouse_id='24242424-2424-4242-8242-242424242424' and product_id='25252525-2525-4252-8252-252525252525'),
+  12,
+  'Completing the count reconciles inventory to the counted quantity'
 );
 
 select * from finish();
