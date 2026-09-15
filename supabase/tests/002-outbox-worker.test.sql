@@ -44,19 +44,21 @@ select results_eq(
 );
 
 select is(
-  public.ack_outbox_event('cccccccc-cccc-4ccc-8ccc-cccccccccc11'::uuid),
+  public.ack_outbox_event((select id from public.outbox_events where aggregate_id='cccccccc-cccc-4ccc-8ccc-cccccccccc11'::uuid)),
   true,
   'Acknowledgement succeeds for the claimed tenant event'
 );
 
 select results_eq(
-  $$select status from public.outbox_events where id='cccccccc-cccc-4ccc-8ccc-cccccccccc11'::uuid$$,
+  $$select status from public.outbox_events where aggregate_id='cccccccc-cccc-4ccc-8ccc-cccccccccc11'::uuid$$,
   $$values ('delivered'::text)$$,
   'Acknowledged event becomes delivered'
 );
 
+set local role postgres;
 insert into public.outbox_events (organization_id, aggregate_type, aggregate_id, event_type, payload, status, attempts, locked_until)
 values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'order', 'cccccccc-cccc-4ccc-8ccc-cccccccccc12', 'order.created', '{}'::jsonb, 'processing', 1, now() - interval '1 minute');
+set local role authenticated;
 
 select is(
   public.recover_expired_outbox_events(10),
@@ -65,7 +67,7 @@ select is(
 );
 
 select results_eq(
-  $$select status from public.outbox_events where id='cccccccc-cccc-4ccc-8ccc-cccccccccc12'::uuid$$,
+  $$select status from public.outbox_events where aggregate_id='cccccccc-cccc-4ccc-8ccc-cccccccccc12'::uuid$$,
   $$values ('pending'::text)$$,
   'Recovered work returns to pending for retry'
 );
