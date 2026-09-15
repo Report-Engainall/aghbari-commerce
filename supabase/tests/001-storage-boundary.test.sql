@@ -27,9 +27,9 @@ select results_eq($$select public from storage.buckets where id='product-media'$
 select results_eq($$select file_size_limit from storage.buckets where id='product-media'$$,$$values (5242880::bigint)$$,'Product media bucket enforces the 5 MiB server-side limit');
 select results_eq($$select allowed_mime_types from storage.buckets where id='product-media'$$,$$values (array['image/webp']::text[])$$,'Product media bucket accepts only canonical WebP objects');
 set local role authenticated;
-select set_config('request.jwt.claims',json_build_object('role','authenticated','sub','11111111-1111-4111-8111-111111111111')::text,true);
-select set_config('request.jwt.claim.role','authenticated',true);
-select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
+select set_config('request.jwt.claims',json_build_object('role','authenticated','sub','11111111-1111-4111-8111-111111111111')::text,false);
+select set_config('request.jwt.claim.role','authenticated',false);
+select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',false);
 
 select results_eq($$select count(*) from storage.objects where bucket_id='product-media'$$,$$values (1::bigint)$$,'Tenant A can read only its active product media');
 select results_eq($$select count(*) from storage.objects where bucket_id='product-media' and name like 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/%'$$,$$values (0::bigint)$$,'Tenant A cannot read Tenant B media');
@@ -47,9 +47,9 @@ select throws_ok($$select public.register_product_media('bbbbbbbb-bbbb-4bbb-8bbb
 select throws_ok($$select public.register_product_media('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11'::uuid,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa21.webp','image/png',1200,900,1024)$$,'22023',null,'Server registration accepts only canonical WebP');
 select throws_ok($$delete from storage.objects where name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa31.webp'$$,'42501',null,'Direct SQL deletion is blocked by the Storage protection trigger');
 
-select set_config('request.jwt.claims',json_build_object('role','authenticated','sub','22222222-2222-4222-8222-222222222222')::text,true);
-select set_config('request.jwt.claim.role','authenticated',true);
-select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true);
+select set_config('request.jwt.claims',json_build_object('role','authenticated','sub','22222222-2222-4222-8222-222222222222')::text,false);
+select set_config('request.jwt.claim.role','authenticated',false);
+select set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',false);
 select results_eq($$select count(*) from storage.objects where bucket_id='product-media'$$,$$values (1::bigint)$$,'Tenant B sees only its own active product media');
 
 select * from finish();
