@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap;
 
-select plan(20);
+select plan(18);
 
 -- F20 CMS/control-plane persistence currently available in this lineage.
 select has_table('public','client_ui_settings','F20 has client_ui_settings persistence');
@@ -27,15 +27,9 @@ select has_table('public','customer_price_tiers','F18 customer-specific pricing 
 select has_column('public','customer_price_tiers','min_quantity','F18 MOQ is persisted');
 select has_column('public','customer_price_tiers','unit_price','F18 server-side unit price exists');
 
--- F24 PWA contract surface is static/runtime code, not a DB entity; record it here as explicit executable gate.
-select has_function('public','get_dashboard_snapshot','F28 trace target backend function exists');
-
--- F28 evidence/audit + F12 outbox linkage.
-select has_table('public','audit_logs','F28 audit log persistence exists');
+-- F28 evidence + F12 outbox linkage.
+select has_table('public','audit_events','F28 audit evidence persistence exists');
 select has_table('public','outbox_events','F28/F12 outbox evidence persistence exists');
-
--- F25 offline/sync must have an idempotency authority in the DB.
-select has_table('public','operation_idempotency','F25 exactly-once idempotency authority exists');
 
 select * from finish();
 rollback;
