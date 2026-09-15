@@ -3,7 +3,15 @@ name: F09 Runtime E2E
 on:
   push:
     branches:
-      - repair/clean-db-p0-war
+      - '**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      exact_sha:
+        description: 'Exact Git commit SHA to verify'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -12,13 +20,23 @@ jobs:
   customer-template-runtime:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact target SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.exact_sha || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
+      - name: Verify exact target SHA
+        env:
+          TARGET_SHA: ${{ inputs.exact_sha || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$TARGET_SHA" || { echo "EXACT HEAD MISMATCH: expected=$TARGET_SHA actual=$actual"; exit 1; }
       - name: Require runtime certification inputs
         env:
           E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
