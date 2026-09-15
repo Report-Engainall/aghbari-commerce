@@ -6,8 +6,8 @@ select plan(11);
 insert into auth.users (id, email) values ('88888888-8888-4888-8888-888888888888', 'stock-count-admin@test.local');
 insert into public.organizations (id, name) values ('67676767-6767-4676-8676-676767676767', 'Stock Count Tenant');
 insert into public.branches (id, organization_id, name) values ('67676767-6767-4676-8676-676767676768', '67676767-6767-4676-8676-676767676767', 'Main');
-insert into public.warehouses (id, organization_id, branch_id, name) values ('67676767-6767-4676-8676-676767676769', '67676767-6767-4676-8676-676767676767', 'Main Warehouse');
-insert into public.warehouses (id, organization_id, branch_id, name) values ('67676767-6767-4676-8676-676767676771', '67676767-6767-4676-8676-676767676767', 'Second Warehouse');
+insert into public.warehouses (id, organization_id, branch_id, name) values ('67676767-6767-4676-8676-676767676769', '67676767-6767-4676-8676-676767676767', '67676767-6767-4676-8676-676767676768', 'Main Warehouse');
+insert into public.warehouses (id, organization_id, branch_id, name) values ('67676767-6767-4676-8676-676767676771', '67676767-6767-4676-8676-676767676767', '67676767-6767-4676-8676-676767676768', 'Second Warehouse');
 insert into public.products (id, organization_id, sku, name, unit) values ('67676767-6767-4676-8676-676767676770', '67676767-6767-4676-8676-676767676767', 'COUNT-001', 'Count Product', 'carton');
 insert into public.profiles (id, organization_id, role) values ('88888888-8888-4888-8888-888888888888', '67676767-6767-4676-8676-676767676767', 'admin');
 insert into public.inventory_balances(organization_id,warehouse_id,product_id,quantity)
@@ -36,7 +36,7 @@ select is((select status from public.start_stock_count('67676767-6767-4676-8676-
 insert into auth.users (id, email) values ('99999999-9999-4999-8999-999999999999', 'stock-count-other-tenant@test.local');
 insert into public.organizations (id, name) values ('78787878-7878-4787-8787-787878787878', 'Other Tenant');
 insert into public.branches (id, organization_id, name) values ('78787878-7878-4787-8787-787878787879', '78787878-7878-4787-8787-787878787878', 'Other Branch');
-insert into public.warehouses (id, organization_id, branch_id, name) values ('78787878-7878-4787-8787-787878787880', '78787878-7878-4787-8787-787878787878', 'Other Warehouse');
+insert into public.warehouses (id, organization_id, branch_id, name) values ('78787878-7878-4787-8787-787878787880', '78787878-7878-4787-8787-787878787879', 'Other Warehouse');
 insert into public.products (id, organization_id, sku, name, unit) values ('78787878-7878-4787-8787-787878787881', '78787878-7878-4787-8787-787878787878', 'COUNT-OTHER', 'Other Count Product', 'carton');
 insert into public.profiles (id, organization_id, role) values ('99999999-9999-4999-8999-999999999999', '78787878-7878-4787-8787-787878787878', 'admin');
 set local request.jwt.claim.sub = '99999999-9999-4999-8999-999999999999';
