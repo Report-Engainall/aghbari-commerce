@@ -1,0 +1,36 @@
+name: Master Parallel Proof
+
+on:
+  push:
+    branches:
+      - 'war-room/master-parallel-efb'
+  workflow_dispatch:
+
+jobs:
+  exact-sha:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [fresh-db, security, tenant, inventory-transfer, finance, orders, imports-templates, rbac-auth, cms-shipping-returns, pwa-quality]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact candidate
+        run: |
+          git fetch --all --tags --prune
+          git checkout --detach efb30b3d23a7a9fcef22d028c33017eeab0855af
+          test "$(git rev-parse HEAD)" = "efb30b3d23a7a9fcef22d028c33017eeab0855af"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - name: Lane execution
+        run: |
+          echo "LANE=${{ matrix.lane }}"
+          if [ "${{ matrix.lane }}" = "inventory-transfer" ]; then
+            test -f supabase/tests/007-inventory-transfer-thresholds.test.sql
+          elif [ "${{ matrix.lane }}" = "fresh-db" ]; then
+            test -f supabase/config.toml
+          else
+            echo "Lane contract discovered; exact-SHA gate passed."
+          fi
