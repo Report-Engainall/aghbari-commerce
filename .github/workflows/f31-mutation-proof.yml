@@ -1,0 +1,82 @@
+name: F31 Mutation Proof
+on:
+  workflow_dispatch:
+  push:
+    branches: [war-room/master-parallel-efb]
+permissions:
+  contents: read
+jobs:
+  mutation-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TARGET_SHA: ${{ github.sha }}
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 1}
+      - name: Exact SHA
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: supabase/setup-cli@v1
+        with: {version: 2.117.0}
+      - name: Run baseline -> mutate -> MUST FAIL -> reset -> baseline for eight boundaries
+        env: {PGPASSWORD: postgres}
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe='war-room/f31/f31-mutation-probe.test.sql'
+          mkdir -p /tmp/f31
+
+          run_probe() {
+            local label="$1"
+            psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f "$probe" | tee "/tmp/f31/${label}.tap"
+          }
+
+          assert_green() {
+            local file="$1"
+            test "$(grep -Ec '^[[:space:]]*ok [0-9]+ - ' "$file")" -eq 8
+            test "$(grep -Ec '^[[:space:]]*not ok ' "$file" || true)" -eq 0
+          }
+
+          assert_red() {
+            local file="$1"
+            test "$(grep -Ec '^[[:space:]]*not ok ' "$file")" -ge 1
+          }
+
+          run_case() {
+            local label="$1"
+            local mutation="$2"
+            echo "===== F31 $label ====="
+            supabase db reset --local --no-seed
+            run_probe "${label}-baseline"
+            assert_green "/tmp/f31/${label}-baseline.tap"
+            psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -c "$mutation"
+            set +e
+            run_probe "${label}-mutated"
+            set -e
+            assert_red "/tmp/f31/${label}-mutated.tap"
+            supabase db reset --local --no-seed
+            run_probe "${label}-restored"
+            assert_green "/tmp/f31/${label}-restored.tap"
+          }
+
+          supabase start
+          run_case inventory "alter table public.products disable row level security;"
+          run_case finance "alter table public.cash_accounts disable row level security;"
+          run_case orders "alter table public.orders disable row level security;"
+          run_case tenant "do \$\$ declare p text; begin select policyname into p from pg_policies where schemaname='public' and tablename='products' limit 1; if p is null then raise exception 'no product policy'; end if; execute format('drop policy %I on public.products', p); end \$\$;"
+          run_case storage "do \$\$ declare p text; begin select policyname into p from pg_policies where schemaname='storage' and tablename='objects' limit 1; if p is null then raise exception 'no storage policy'; end if; execute format('drop policy %I on storage.objects', p); end \$\$;"
+          run_case rbac "create function public.f31_forbidden_rpc() returns integer language sql as \$\$select 1\$\$; grant execute on function public.f31_forbidden_rpc() to anon;"
+          run_case idempotency "drop index if exists public.orders_idempotency_unique_idx;"
+          run_case outbox "drop function public.claim_outbox_events(integer);"
+
+          echo 'F31 mutation proof PASS: all eight boundaries baseline green, mutation red, reset green.'
+      - name: Upload mutation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: f31-mutation-evidence-${{ github.sha }}
+          path: /tmp/f31
+          if-no-files-found: ignore
+      - if: always()
+        run: supabase stop --no-backup
