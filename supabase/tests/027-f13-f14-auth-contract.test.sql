@@ -1,0 +1,17 @@
+begin;
+create extension if not exists pgtap;
+select plan(10);
+
+select has_table('public','profiles','F13/F14 authenticated identities bind to profiles');
+select has_table('public','customer_invitations','F14 invitation state exists');
+select has_function('public','create_customer_invitation','F14 invitation creation authority exists');
+select has_function('public','get_customer_invitation_for_acceptance','F14 acceptance lookup authority exists');
+select has_function('public','consume_customer_invitation','F14 one-time consumption authority exists');
+select ok(has_function('public','current_organization_id'),'F13 backend tenant context helper exists');
+select ok(has_function('public','current_role'),'F13 backend role context helper exists');
+select ok(exists(select 1 from information_schema.routine_privileges where routine_schema='public' and routine_name='consume_customer_invitation' and grantee='service_role' and privilege_type='EXECUTE'),'F14 consume invitation is backend-only service role');
+select ok(not exists(select 1 from information_schema.routine_privileges where routine_schema='public' and routine_name='consume_customer_invitation' and grantee='anon' and privilege_type='EXECUTE'),'F14 anon cannot consume invitation');
+select ok(not exists(select 1 from information_schema.routine_privileges where routine_schema='public' and routine_name='consume_customer_invitation' and grantee='authenticated' and privilege_type='EXECUTE'),'F14 authenticated client cannot directly consume invitation');
+
+select * from finish();
+rollback;
