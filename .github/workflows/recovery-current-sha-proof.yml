@@ -18,11 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      TARGET_SHA: ${{ inputs.exact_sha || github.sha }}
+      TARGET_SHA: ${{ inputs.exact_sha || '296cfb9722eb3d7db964e63f60ec7caf62f5b425' }}
     steps:
       - name: Validate exact SHA input
         shell: bash
-        run: echo "$TARGET_SHA" | grep -Eq '^[0-9a-f]{40}$'
+        run: |
+          echo "$TARGET_SHA" | grep -Eq '^[0-9a-f]{40}$' || { echo "INVALID SHA: $TARGET_SHA"; exit 1; }
+          status="$(curl -sS -o /dev/null -w '%{http_code}' "https://api.github.com/repos/Report-Engainall/aghbari-commerce/commits/$TARGET_SHA")"
+          test "$status" = "200" || { echo "NONEXISTENT SHA: $TARGET_SHA (GitHub API HTTP $status)"; exit 1; }
       - name: Checkout exact target SHA
         uses: actions/checkout@v4
         with:
