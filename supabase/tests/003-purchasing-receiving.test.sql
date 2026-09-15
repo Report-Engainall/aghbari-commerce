@@ -10,7 +10,7 @@ values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'Purchasing Tenant A');
 insert into public.branches (id, organization_id, name)
 values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'Main Branch');
 insert into public.warehouses (id, organization_id, branch_id, name)
-values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01', 'Main Warehouse');
+values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'Main Warehouse');
 insert into public.products (id, organization_id, sku, name, unit)
 values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'R5-001', 'Rice', 'carton');
 insert into public.customers (id, organization_id, name, tier)
@@ -30,7 +30,7 @@ select results_eq($$select total from public.create_purchase_order('eeeeeeee-eee
 select throws_ok($$select * from public.create_purchase_order('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee05'::uuid,'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02'::uuid,'r5-purchase-key-000001',jsonb_build_array(jsonb_build_object('product_id','eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03','quantity',11,'unit_cost',1250)),'YER')$$,'40001','idempotency key payload conflict','Changed purchase payload under the same key is rejected');
 select is((select status from public.submit_purchase_order((select id from public.purchase_orders where idempotency_key='r5-purchase-key-000001'))),'submitted'::public.purchase_order_status,'Draft purchase order can be submitted');
 select is((select status from public.approve_purchase_order((select id from public.purchase_orders where idempotency_key='r5-purchase-key-000001'))),'approved'::public.purchase_order_status,'Submitted purchase order requires explicit approval');
-select is((select coalesce(quantity,0) from public.inventory_balances where warehouse_id='eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02'::uuid and product_id='eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03'::uuid),0,'Approval alone does not mutate inventory');
+select is(coalesce((select quantity from public.inventory_balances where warehouse_id='eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02'::uuid and product_id='eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03'::uuid),0),0,'Approval alone does not mutate inventory');
 select is((select purchase_order_status from public.receive_purchase_order((select id from public.purchase_orders where idempotency_key='r5-purchase-key-000001'),'r5-receipt-key-000001',jsonb_build_array(jsonb_build_object('purchase_order_item_id',(select id from public.purchase_order_items limit 1),'product_id','eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03','quantity',10)))), 'received'::public.purchase_order_status,'Full receipt closes the purchase order');
 select is((select quantity from public.inventory_balances where warehouse_id='eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02'::uuid and product_id='eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03'::uuid),10,'Receiving adds exactly the received quantity to inventory');
 select is((select count(*) from public.inventory_movements where source_type='purchase_receipt'),1::bigint,'Receiving creates one auditable inventory movement');
