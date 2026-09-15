@@ -1,66 +1,41 @@
 # EXECUTION STATE
 
-CURRENT_HEAD: `1d2a28d6d12fb88d5def940e3a30dcfa46bedf05`
-CURRENT_CANDIDATE: `1d2a28d6d12fb88d5def940e3a30dcfa46bedf05` (NOT FROZEN)
-LAST_PROVEN_CODE_BEFORE_THIS_ROUND: `02c6a5972ad65d312532502ae44a94ed4e8b1c1c`
-CURRENT_PRODUCTION_ARTIFACT_SHA: `8017e05f6c0554094dd9165f66c4e83b6ab7831e`
+CURRENT_HEAD: `56c593014466eceab88684a5279ed5c8c40ea276`
+CURRENT_BRANCH: `war-room/efb30b3-f04-f29-proof`
+CURRENT_CANDIDATE: NOT FROZEN
 LAST_CERTIFIED_EVIDENCE: `NONE`
+PRODUCTION: NO TOUCH
+F33: NO
+F34: NO
 
-## CLOSED / PROVEN
-- Exact candidate `8017...` migration replay reached successful empty-database migration application; pgTAP then exposed real defects. No Clean DB PASS was claimed.
-- Security Audit PASS: run `34919573884` / exact SHA `8017...`.
-- Order Workflow PASS: run `34919573794` / exact SHA `8017...`.
-- G1 Domain PASS: run `34919573882` / exact SHA `8017...`.
-- Live production artifact `/build-meta.json` returned SHA `8017...` with HTTP 200.
-- Runtime hardening implemented after replay: finance enum cast, invalid numeric finite check, create_order ambiguity qualification, SECURITY DEFINER search_path pinning, public/anon execute revocation, and 25 operational FK indexes.
-- Test contracts repaired where replay proved fixture/signature drift: import fingerprints, warehouse-aware catalog privilege assertion, storage policy expectation, qualified enum RPC signatures, storage UUID/path fixtures.
+## CLOSED
+- `efb30b3d23a7a9fcef22d028c33017eeab0855af` is a real transfer_inventory repair commit; it is not itself a branch HEAD.
+- The repair was forward-ported onto this proof lineage as migration `20260915150000_fix_transfer_inventory_idempotency_lookup.sql`.
+- The repair explicitly qualifies `inventory_transfers t.organization_id` and `t.idempotency_key` in the existing-idempotency lookup and preserves payload-conflict checks.
 
-## CURRENT OPEN / NOT PROVEN
-- Fresh Clean DB + pgTAP on exact current candidate `1d2...`.
-- Application Quality on exact current candidate `1d2...`.
-- Customer Browser E2E on exact current candidate.
-- Tenant A/B Browser E2E and full mutation matrix.
-- Full RPC adversarial matrix: authorized / unauthorized / wrong role / wrong tenant / malformed / replay / duplicate.
-- Inventory runtime war.
-- Finance runtime war.
-- Templates browser proof.
-- Quick Order runtime/browser proof.
-- RBAC six-role matrix.
-- Order lifecycle runtime proof.
-- Import/export runtime proof.
-- Outbox runtime proof.
-- Offline/recovery browser proof.
-- Admin/invitation E2E.
-- Dynamic Admin and Shipping/Returns runtime proof.
-- Exact candidate-to-Vercel deployment mapping; Vercel deployment listing currently returns 403.
-- Live Browser certification.
-- Leaked Password Protection external configuration.
-- Final regression and certification.
+## NOT PROVEN ON CURRENT HEAD
+- F04/F29 transfer adversarial matrix.
+- Fresh DB + migration + pgTAP on current HEAD.
+- F26 Storage 19/19.
+- F31 mutation proof.
+- F20/F21/F22/F10/F13/F14/F18/F24/F25/F28 current-head evidence.
 
-## FAILURES / ROOT CAUSES
-- Clean DB run `34919573890` / SHA `8017...`: migrations applied successfully, but pgTAP failed across multiple suites. Root causes included stale/invalid fixtures, stale RPC signatures, real finance function defects, missing operational FK indexes, and missing search_path hardening after later function recreation.
-- Real finance defects: `record_payment` assigned text to enum `invoice_status`; `record_expense` called nonexistent `isfinite(numeric)`.
-- Real order defect: `create_order` had ambiguous `status` reference under current PL/pgSQL variable resolution.
-- Real security drift: later `CREATE OR REPLACE` definitions restored `search_path=public` for selected SECURITY DEFINER functions; hardening migration re-pins them.
-- Test drift: several pgTAP fixtures contained invalid UUID/fingerprint data or asserted superseded API signatures/policy contracts.
+## BLOCKED
+- GitHub Actions did not expose a workflow run for this newly created repair proof branch, so no PASS is claimed from CI.
+- Existing Vercel statuses are unrelated build-rate-limit failures and are not evidence for this repair.
 
-## EXACT EVIDENCE
-- `34919573890` / SHA `8017...`: CLEAN DB **FAIL**; migration application PASS, pgTAP FAIL.
-- `34919573884` / SHA `8017...`: Security **PASS**.
-- `34919573794` / SHA `8017...`: Order Workflow **PASS**.
-- `34919573882` / SHA `8017...`: G1 **PASS**.
-- Production `/build-meta.json`: live artifact SHA `8017...`, HTTP 200.
-- Vercel deployment listing: 403, therefore deployment-ID mapping remains OPEN.
+## EXACT LINEAGE
+- Original repair: `efb30b3d23a7a9fcef22d028c33017eeab0855af`, parent `747efb382017de23f1454968a56f12490e81c918`.
+- Forward-port commit: `946994bedde1bc1fb715b8ce8f74034a9b62e6d2`.
+- Exact-SHA DB proof workflow added: `fa3968a42490894e13bf282fcd29af97e1de8170`.
+- Workflow trigger commit: `56c593014466eceab88684a5279ed5c8c40ea276`.
 
-## USER ACTION
-- Admin fixture remains required: add `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` as GitHub Actions secrets for a dedicated non-production OWNER/ADMIN test account. Never paste the password in chat; reply `DONE ADMIN`.
-- Leaked Password Protection remains an external Supabase Auth configuration gate.
+## RULE
+No PASS transfers across SHA. No commit presence is evidence of execution. Every code-dependent claim requires fresh exact-SHA evidence.
 
-## NEXT ACTION
-1. Fresh Clean DB/pgTAP on exact current candidate `1d2...`; fix next failures without carrying old PASS.
-2. Exact-head Application Quality plus targeted regression after the replay fixes.
-3. Customer/Tenant/RPC adversarial runtime fronts in parallel.
-4. Inventory/Finance/Quick Order/Templates/Outbox/Recovery/RBAC runtime fronts in parallel.
-5. Production exact-SHA mapping + Live Browser only after current candidate passes its code/database/runtime gates.
-
-Resource discipline: no raw logs stored; no duplicate expensive scans; code-dependent PASS never transfers across SHAs; docs-only changes do not certify code.
+## NEXT
+1. Obtain an actual executable workflow run for current HEAD.
+2. Fresh DB + pgTAP exact-head.
+3. F04/F29 adversarial transfer matrix exact-head.
+4. F26 + F31 exact-head.
+5. Continue independent war-room fronts in parallel.
