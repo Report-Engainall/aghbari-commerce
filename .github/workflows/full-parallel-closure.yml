@@ -30,16 +30,26 @@ jobs:
       - name: Domain suites
         env: {PGPASSWORD: postgres}
         run: |
-          set -o pipefail
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/003-purchasing-receiving.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/005-purchase-idempotency-full-payload.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/008-finance-invoices-cash-expenses.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/009-cash-account-expense.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/011-catalog-warehouse-boundary.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/011-catalog-warehouse-truth.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/014-cart-order-tenant-boundary.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/020-order-state-machine-boundary.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/040-transfer-inventory-adversarial.test.sql
+          set -euo pipefail
+          mkdir -p /tmp/domain
+          for t in \
+            supabase/tests/003-purchasing-receiving.test.sql \
+            supabase/tests/005-purchase-idempotency-full-payload.test.sql \
+            supabase/tests/008-finance-invoices-cash-expenses.test.sql \
+            supabase/tests/009-cash-account-expense.test.sql \
+            supabase/tests/011-catalog-warehouse-boundary.test.sql \
+            supabase/tests/011-catalog-warehouse-truth.test.sql \
+            supabase/tests/014-cart-order-tenant-boundary.test.sql \
+            supabase/tests/020-order-state-machine-boundary.test.sql \
+            supabase/tests/040-transfer-inventory-adversarial.test.sql; do
+            f="/tmp/domain/$(basename "$t").tap"
+            psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f "$t" | tee "$f"
+            test "$(awk '/^[[:space:]]*not ok /{n++} END{print n+0}' "$f")" -eq 0
+          done
+      - name: Upload domain evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: {name: domain-evidence-${{ github.sha }}, path: /tmp/domain, if-no-files-found: ignore}
       - if: always()
         run: supabase stop --no-backup
 
@@ -49,7 +59,6 @@ jobs:
     timeout-minutes: 45
     env:
       TARGET_SHA: ${{ github.sha }}
-      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 1}
@@ -60,12 +69,22 @@ jobs:
       - name: Security adversarial suites
         env: {PGPASSWORD: postgres}
         run: |
-          set -o pipefail
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/012-rpc-negative-security.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/013-security-regression-contract.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/013-tenant-mutation-boundary.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/018-rpc-privilege-surface.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/019-security-definer-contract.test.sql
+          set -euo pipefail
+          mkdir -p /tmp/security
+          for t in \
+            supabase/tests/012-rpc-negative-security.test.sql \
+            supabase/tests/013-security-regression-contract.test.sql \
+            supabase/tests/013-tenant-mutation-boundary.test.sql \
+            supabase/tests/018-rpc-privilege-surface.test.sql \
+            supabase/tests/019-security-definer-contract.test.sql; do
+            f="/tmp/security/$(basename "$t").tap"
+            psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f "$t" | tee "$f"
+            test "$(awk '/^[[:space:]]*not ok /{n++} END{print n+0}' "$f")" -eq 0
+          done
+      - name: Upload security evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: {name: security-evidence-${{ github.sha }}, path: /tmp/security, if-no-files-found: ignore}
       - if: always()
         run: supabase stop --no-backup
 
@@ -73,9 +92,7 @@ jobs:
     name: RELIABILITY / F12 F25 F29 F30
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      TARGET_SHA: ${{ github.sha }}
-      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+    env: {TARGET_SHA: ${{ github.sha }} }
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 1}
@@ -86,11 +103,22 @@ jobs:
       - name: Reliability suites
         env: {PGPASSWORD: postgres}
         run: |
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/002-outbox-worker.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/005-purchase-idempotency-full-payload.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/012-stock-count-concurrency.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/031-f04-f29-adversarial-transfer.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/040-transfer-inventory-adversarial.test.sql
+          set -euo pipefail
+          mkdir -p /tmp/reliability
+          for t in \
+            supabase/tests/002-outbox-worker.test.sql \
+            supabase/tests/005-purchase-idempotency-full-payload.test.sql \
+            supabase/tests/012-stock-count-concurrency.test.sql \
+            supabase/tests/031-f04-f29-adversarial-transfer.test.sql \
+            supabase/tests/040-transfer-inventory-adversarial.test.sql; do
+            f="/tmp/reliability/$(basename "$t").tap"
+            psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f "$t" | tee "$f"
+            test "$(awk '/^[[:space:]]*not ok /{n++} END{print n+0}' "$f")" -eq 0
+          done
+      - name: Upload reliability evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: {name: reliability-evidence-${{ github.sha }}, path: /tmp/reliability, if-no-files-found: ignore}
       - if: always()
         run: supabase stop --no-backup
 
@@ -98,9 +126,7 @@ jobs:
     name: IMPORT / F07 F08
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      TARGET_SHA: ${{ github.sha }}
-      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+    env: {TARGET_SHA: ${{ github.sha }}}
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 1}
@@ -111,10 +137,21 @@ jobs:
       - name: Import suites
         env: {PGPASSWORD: postgres}
         run: |
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/010-import-malformed-numeric.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/015-import-inventory-delta.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/016-import-tenant-boundary.test.sql
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/017-import-inventory-delta.test.sql
+          set -euo pipefail
+          mkdir -p /tmp/imports
+          for t in \
+            supabase/tests/010-import-malformed-numeric.test.sql \
+            supabase/tests/015-import-inventory-delta.test.sql \
+            supabase/tests/016-import-tenant-boundary.test.sql \
+            supabase/tests/017-import-inventory-delta.test.sql; do
+            f="/tmp/imports/$(basename "$t").tap"
+            psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f "$t" | tee "$f"
+            test "$(awk '/^[[:space:]]*not ok /{n++} END{print n+0}' "$f")" -eq 0
+          done
+      - name: Upload import evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: {name: import-evidence-${{ github.sha }}, path: /tmp/imports, if-no-files-found: ignore}
       - if: always()
         run: supabase stop --no-backup
 
@@ -122,9 +159,7 @@ jobs:
     name: STORAGE / F26
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      TARGET_SHA: ${{ github.sha }}
-      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+    env: {TARGET_SHA: ${{ github.sha }}}
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 1}
@@ -134,30 +169,49 @@ jobs:
       - run: supabase start && supabase db reset --local --no-seed
       - name: Storage 15 assertion contract
         env: {PGPASSWORD: postgres}
-        run: psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/001-storage-boundary.test.sql
+        run: |
+          mkdir -p /tmp/storage
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/001-storage-boundary.test.sql | tee /tmp/storage/storage.tap
+          test "$(awk '/^[[:space:]]*ok [0-9]+ - /{n++} END{print n+0}' /tmp/storage/storage.tap)" -eq 15
+          test "$(awk '/^[[:space:]]*not ok /{n++} END{print n+0}' /tmp/storage/storage.tap)" -eq 0
+          grep -Eq '^[[:space:]]*1\.\.15[[:space:]]*$' /tmp/storage/storage.tap
+      - name: Upload storage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: {name: storage-evidence-${{ github.sha }}, path: /tmp/storage, if-no-files-found: ignore}
       - if: always()
         run: supabase stop --no-backup
 
   test_the_test:
     name: TEST-THE-TEST / F31
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    env: {TARGET_SHA: ${{ github.sha }}}
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 1}
-      - name: Exact SHA
-        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
-      - name: Require real mutation harness
-        run: |
-          test -f .github/workflows/f31-mutation-proof.yml
-          test -f war-room/f31/f31-mutation-probe.test.sql
+      - run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: supabase/setup-cli@v1
+        with: {version: 2.117.0}
+      - name: Real mutation proof
+        run: bash war-room/f31/run-mutation-proof.sh /tmp/f31
+        env: {PGPASSWORD: postgres}
+      - name: Upload mutation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: {name: f31-evidence-${{ github.sha }}, path: /tmp/f31, if-no-files-found: error}
+      - if: always()
+        run: supabase stop --no-backup
 
   quality:
     name: QUALITY / F32
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env: {TARGET_SHA: ${{ github.sha }}}
     steps:
       - uses: actions/checkout@v4
+        with: {fetch-depth: 1}
+      - run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci --no-audit --no-fund
@@ -172,13 +226,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
+      TARGET_SHA: ${{ github.sha }}
       E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
       E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
       E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 1}
-      - run: test -n "$E2E_BASE_URL" && test -n "$E2E_EMAIL" && test -n "$E2E_PASSWORD"
+      - run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - name: Validate E2E inputs
+        run: test -n "$E2E_BASE_URL" && test -n "$E2E_EMAIL" && test -n "$E2E_PASSWORD"
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
       - run: npm ci --no-audit --no-fund
