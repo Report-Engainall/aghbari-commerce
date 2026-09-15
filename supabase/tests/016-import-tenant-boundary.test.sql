@@ -1,5 +1,6 @@
 begin;
 
+create extension if not exists pgtap with schema extensions;
 select plan(10);
 
 create temp table fixture as
@@ -29,16 +30,16 @@ select set_config('request.jwt.claim.sub',(select viewer_a::text from fixture),t
 select throws_ok($$select public.stage_product_import('viewer.xlsx',repeat('a',64),'[{"sku":"X","name":"X","unit":"unit","category":"C","quantity":1,"prices":{"retail":1,"wholesale":1,"distributor":1}}]'::jsonb)$$,'42501',null,'viewer cannot stage imports');
 
 select set_config('request.jwt.claim.sub',(select admin_a::text from fixture),true);
-select public.stage_product_import('tenant-a.xlsx',repeat('a',64),'[{"sku":"IMP-A","name":"Imported A","unit":"unit","category":"Imported","quantity":4,"prices":{"retail":10,"wholesale":9,"distributor":8}}]'::jsonb) is not null;
+select ok((select public.stage_product_import('tenant-a.xlsx',repeat('a',64),'[{"sku":"IMP-A","name":"Imported A","unit":"unit","category":"Imported","quantity":4,"prices":{"retail":10,"wholesale":9,"distributor":8}}]'::jsonb) is not null),'Tenant A admin can stage its own import');
 select throws_ok($$select public.stage_product_import('duplicate.xlsx',repeat('a',64),'[{"sku":"IMP-A2","name":"Duplicate","unit":"unit","category":"Imported","quantity":1,"prices":{"retail":2,"wholesale":2,"distributor":2}}]'::jsonb)$$,'23505',null,'duplicate fingerprint is rejected inside the same tenant');
 select is((select count(*) from public.import_jobs where organization_id=(select org_a from fixture)),1::bigint,'Tenant A has exactly one staged job');
 select is((select count(*) from public.import_jobs where source_fingerprint=repeat('a',64) and organization_id=(select org_b from fixture)),0::bigint,'Tenant B has no Tenant A import job');
-select throws_ok(format('select public.commit_product_import((select id from public.import_jobs where organization_id=%L limit 1),%L)',org_a,warehouse_b),'42501','Tenant A cannot commit to Tenant B warehouse') from fixture;
+select throws_ok(format('select public.commit_product_import((select id from public.import_jobs where organization_id=%L limit 1),%L)',(select org_a from fixture),(select warehouse_b from fixture)),'42501','Tenant A cannot commit to Tenant B warehouse');
 
 select set_config('request.jwt.claim.sub',(select admin_b::text from fixture),true);
-select public.stage_product_import('tenant-b.xlsx',repeat('a',64),'[{"sku":"IMP-B","name":"Imported B","unit":"unit","category":"Imported","quantity":3,"prices":{"retail":11,"wholesale":10,"distributor":9}}]'::jsonb) is not null;
+select ok((select public.stage_product_import('tenant-b.xlsx',repeat('a',64),'[{"sku":"IMP-B","name":"Imported B","unit":"unit","category":"Imported","quantity":3,"prices":{"retail":11,"wholesale":10,"distributor":9}}]'::jsonb) is not null),'Tenant B admin can stage its own import with same fingerprint');
 select is((select count(*) from public.import_jobs where source_fingerprint=repeat('a',64)),2::bigint,'Same fingerprint is independently scoped by tenant');
-select throws_ok(format('select public.commit_product_import(%L,%L)',(select id from public.import_jobs where organization_id=(select org_a from fixture) limit 1),warehouse_b),'P0002','Tenant B cannot commit Tenant A job') from fixture;
+select throws_ok(format('select public.commit_product_import(%L,%L)',(select id from public.import_jobs where organization_id=(select org_a from fixture) limit 1),(select warehouse_b from fixture)),'P0002','Tenant B cannot commit Tenant A job');
 select is((select count(*) from public.import_rows r join public.import_jobs j on j.id=r.import_job_id where j.organization_id=(select org_b from fixture)),1::bigint,'Tenant B import rows remain tenant-scoped');
 
 select * from finish();
