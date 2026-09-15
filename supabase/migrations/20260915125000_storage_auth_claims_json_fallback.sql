@@ -10,9 +10,9 @@ SET row_security = off
 AS $$
   SELECT COALESCE(
     nullif(current_setting('request.jwt.claim.sub', true), '')::uuid,
-    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub',
-    auth.uid()::text
-  )::uuid;
+    nullif((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'), '')::uuid,
+    auth.uid()
+  );
 $$;
 
 CREATE OR REPLACE FUNCTION public.storage_current_organization_id()
