@@ -1,0 +1,51 @@
+name: wave3-static-contract
+
+on:
+  push:
+    branches:
+      - 'war-room/**'
+  workflow_dispatch:
+    inputs:
+      exact_sha:
+        required: true
+        type: string
+
+jobs:
+  f24-pwa-static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.exact_sha || github.sha }}
+          fetch-depth: 0
+      - name: Verify exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ inputs.exact_sha || github.sha }}'
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$expected"
+          echo "EXACT_SHA=$actual"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: PWA manifest contract
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const m = JSON.parse(fs.readFileSync('public/manifest.webmanifest','utf8'));
+          if (m.lang !== 'ar' || m.dir !== 'rtl' || m.display !== 'standalone' || m.start_url !== '/' || m.scope !== '/') throw new Error('PWA manifest contract failed');
+          if (!m.icons?.length) throw new Error('PWA manifest icons missing');
+          NODE
+      - name: Service worker and cache contract
+        run: |
+          set -euo pipefail
+          found=$(find public src -type f \( -iname '*service-worker*' -o -iname '*serviceworker*' -o -name 'sw.js' -o -name 'sw.ts' -o -name 'sw.tsx' \) | head -1 || true)
+          if [ -z "$found" ]; then
+            echo 'F24_FIRST_FAILURE=service-worker implementation missing'
+            exit 1
+          fi
+          grep -RqiE 'serviceWorker|caches\.open|CacheFirst|NetworkFirst|StaleWhileRevalidate' "$found" || { echo 'F24_FIRST_FAILURE=cache strategy missing'; exit 1; }
+          echo "SERVICE_WORKER=$found"
