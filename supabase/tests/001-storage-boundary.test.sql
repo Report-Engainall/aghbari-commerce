@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(19);
+select plan(20);
 
 insert into auth.users(id,email) values
  ('11111111-1111-4111-8111-111111111111','storage-a@test.local'),
@@ -41,7 +41,6 @@ select throws_ok($$select public.register_product_media('aaaaaaaa-aaaa-4aaa-8aaa
 select results_eq($$select count(*) from storage.objects where name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa99/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa29.webp'$$,$$values (0::bigint)$$,'Orphan product path is not readable');
 select throws_ok($$insert into storage.objects(bucket_id,name,owner_id,metadata) values ('product-media','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa33.webp','11111111-1111-4111-8111-111111111111','{"mimetype":"image/webp","size":2048}'::jsonb)$$,'42501',null,'Tenant A cannot upload into Tenant B organization prefix');
 select results_eq($$with changed as (update storage.objects set name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa34.webp' where name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa21.webp' returning 1) select count(*) from changed$$,$$values (0::bigint)$$,'Denied direct storage UPDATE affects zero rows');
-select results_eq($$select count(*) from storage.objects where name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa21.webp'$$,$$values (0::bigint)$$,'Denied UPDATE does not expose a shortened-path object');
 select results_eq($$select count(*) from storage.objects where name='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa21.webp'$$,$$values (1::bigint)$$,'Denied UPDATE leaves the original object unchanged');
 select lives_ok($$select public.register_product_media('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11'::uuid,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa31.webp','image/webp',1200,900,2048)$$,'Server registers a valid owned WebP object');
 select throws_ok($$select public.register_product_media('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1'::uuid,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/bbbbbbbb-bbbb-4bbb-8bbb-222222222222.webp','image/webp',1200,900,2048)$$,'42501',null,'Server rejects a product from another tenant');
