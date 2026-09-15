@@ -1,66 +1,44 @@
 # EXECUTION STATE
 
-CURRENT_HEAD: `1d2a28d6d12fb88d5def940e3a30dcfa46bedf05`
-CURRENT_CANDIDATE: `1d2a28d6d12fb88d5def940e3a30dcfa46bedf05` (NOT FROZEN)
-LAST_PROVEN_CODE_BEFORE_THIS_ROUND: `02c6a5972ad65d312532502ae44a94ed4e8b1c1c`
-CURRENT_PRODUCTION_ARTIFACT_SHA: `8017e05f6c0554094dd9165f66c4e83b6ab7831e`
-LAST_CERTIFIED_EVIDENCE: `NONE`
+CURRENT_HEAD: `bf61908bc2fcc75770e40bc6e6b09a8b60b4bf81`
+CURRENT_BRANCH: `war-room/master-parallel-efb`
+TARGET_CANDIDATE: `efb30b3d23a7a9fcef22d028c33017eeab0855af`
+CURRENT_CANDIDATE: NOT FROZEN
+LAST_CERTIFIED_EVIDENCE: NONE
+PRODUCTION: NO TOUCH
+F33: NO
+F34: NO
 
-## CLOSED / PROVEN
-- Exact candidate `8017...` migration replay reached successful empty-database migration application; pgTAP then exposed real defects. No Clean DB PASS was claimed.
-- Security Audit PASS: run `34919573884` / exact SHA `8017...`.
-- Order Workflow PASS: run `34919573794` / exact SHA `8017...`.
-- G1 Domain PASS: run `34919573882` / exact SHA `8017...`.
-- Live production artifact `/build-meta.json` returned SHA `8017...` with HTTP 200.
-- Runtime hardening implemented after replay: finance enum cast, invalid numeric finite check, create_order ambiguity qualification, SECURITY DEFINER search_path pinning, public/anon execute revocation, and 25 operational FK indexes.
-- Test contracts repaired where replay proved fixture/signature drift: import fingerprints, warehouse-aware catalog privilege assertion, storage policy expectation, qualified enum RPC signatures, storage UUID/path fixtures.
+## CLOSED / PROVEN ON TARGET CANDIDATE
+- Run `34940695331` verified exact checkout of `efb30b3...` before execution.
+- Security contract PASS: Run `34940695331`, Job `104288478352`, exact candidate SHA.
+- Fresh DB, Domain, F04/F29 and F31 were executed on exact candidate and correctly ended FAIL; no PASS transfer.
+- Storage current contract: 15 assertions; exact candidate result 10/15 PASS and 5/15 FAIL.
 
-## CURRENT OPEN / NOT PROVEN
-- Fresh Clean DB + pgTAP on exact current candidate `1d2...`.
-- Application Quality on exact current candidate `1d2...`.
-- Customer Browser E2E on exact current candidate.
-- Tenant A/B Browser E2E and full mutation matrix.
-- Full RPC adversarial matrix: authorized / unauthorized / wrong role / wrong tenant / malformed / replay / duplicate.
-- Inventory runtime war.
-- Finance runtime war.
-- Templates browser proof.
-- Quick Order runtime/browser proof.
-- RBAC six-role matrix.
-- Order lifecycle runtime proof.
-- Import/export runtime proof.
-- Outbox runtime proof.
-- Offline/recovery browser proof.
-- Admin/invitation E2E.
-- Dynamic Admin and Shipping/Returns runtime proof.
-- Exact candidate-to-Vercel deployment mapping; Vercel deployment listing currently returns 403.
-- Live Browser certification.
-- Leaked Password Protection external configuration.
-- Final regression and certification.
+## MASTER PARALLEL EXECUTION
+- Branch created from exact candidate: `war-room/master-parallel-efb`.
+- Transfer test fixture repaired: commit `50fa6cb5f7ffd595c687545834991d630a36d5cd`.
+- Parallel proof workflow added: `.github/workflows/master-parallel-proof.yml`.
+- Push of the war-room branch triggered GitHub Actions; run `34941510848` is queued on the branch and exact-candidate verification is part of the matrix.
+- Matrix lanes declared: fresh-db, security, tenant, inventory-transfer, finance, orders, imports-templates, rbac-auth, cms-shipping-returns, pwa-quality.
 
-## FAILURES / ROOT CAUSES
-- Clean DB run `34919573890` / SHA `8017...`: migrations applied successfully, but pgTAP failed across multiple suites. Root causes included stale/invalid fixtures, stale RPC signatures, real finance function defects, missing operational FK indexes, and missing search_path hardening after later function recreation.
-- Real finance defects: `record_payment` assigned text to enum `invoice_status`; `record_expense` called nonexistent `isfinite(numeric)`.
-- Real order defect: `create_order` had ambiguous `status` reference under current PL/pgSQL variable resolution.
-- Real security drift: later `CREATE OR REPLACE` definitions restored `search_path=public` for selected SECURITY DEFINER functions; hardening migration re-pins them.
-- Test drift: several pgTAP fixtures contained invalid UUID/fingerprint data or asserted superseded API signatures/policy contracts.
+## FAIL / RCA / FIX
+- F04/F29 exact candidate: first failure was fixture contract at `007-inventory-transfer-thresholds.test.sql`; warehouse rows omitted required `branch_id`. Fixed on current war-room branch by `50fa6cb5...`.
+- F31: baseline failed, so mutation was correctly skipped. F31 remains FAIL until baseline PASS then real mutation proof is completed.
+- Fresh DB: exact candidate pgTAP FAIL; Storage 5/15 plus other domain/security-contract failures remain.
 
-## EXACT EVIDENCE
-- `34919573890` / SHA `8017...`: CLEAN DB **FAIL**; migration application PASS, pgTAP FAIL.
-- `34919573884` / SHA `8017...`: Security **PASS**.
-- `34919573794` / SHA `8017...`: Order Workflow **PASS**.
-- `34919573882` / SHA `8017...`: G1 **PASS**.
-- Production `/build-meta.json`: live artifact SHA `8017...`, HTTP 200.
-- Vercel deployment listing: 403, therefore deployment-ID mapping remains OPEN.
+## STORAGE
+- Exact candidate: 10/15 PASS, 5/15 FAIL.
+- Failing areas: valid media insert, cross-tenant upload, invalid filename, direct UPDATE protection, `register_product_media`.
+- Current Storage count is 15 only; historical 19-assertion evidence is not used.
 
-## USER ACTION
-- Admin fixture remains required: add `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` as GitHub Actions secrets for a dedicated non-production OWNER/ADMIN test account. Never paste the password in chat; reply `DONE ADMIN`.
-- Leaked Password Protection remains an external Supabase Auth configuration gate.
+## BLOCKED
+- Browser F09/F15/F16 requires real non-production E2E secrets: `E2E_BASE_URL`, `E2E_EMAIL`, `E2E_PASSWORD`.
+- Full F31 requires a green baseline first.
 
-## NEXT ACTION
-1. Fresh Clean DB/pgTAP on exact current candidate `1d2...`; fix next failures without carrying old PASS.
-2. Exact-head Application Quality plus targeted regression after the replay fixes.
-3. Customer/Tenant/RPC adversarial runtime fronts in parallel.
-4. Inventory/Finance/Quick Order/Templates/Outbox/Recovery/RBAC runtime fronts in parallel.
-5. Production exact-SHA mapping + Live Browser only after current candidate passes its code/database/runtime gates.
-
-Resource discipline: no raw logs stored; no duplicate expensive scans; code-dependent PASS never transfers across SHAs; docs-only changes do not certify code.
+## EXECUTION RULES
+- PASS never transfers across SHA.
+- CODE/TEST/CI/RUNTIME/LIVE/PRODUCTION are separate evidence layers.
+- Every FAIL follows first-failing-layer → RCA → classification → fix → targeted → adversarial → regression → exact SHA.
+- Delta execution only; no unnecessary full reruns.
+- Production remains untouched until F33/F34.
