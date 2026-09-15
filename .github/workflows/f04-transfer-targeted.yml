@@ -28,7 +28,12 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/040-transfer-inventory-adversarial.test.sql
+          set -o pipefail
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/040-transfer-inventory-adversarial.test.sql | tee /tmp/f04-transfer.tap
+          if ! grep -Eq '^# Looks like you failed 0 tests$' /tmp/f04-transfer.tap; then
+            echo 'F04 pgTAP assertion failure: refusing false CI success.'
+            exit 1
+          fi
       - name: Stop isolated database
         if: always()
         run: supabase stop --no-backup
