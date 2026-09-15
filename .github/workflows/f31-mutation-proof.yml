@@ -32,15 +32,19 @@ jobs:
             psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f "$probe" | tee "/tmp/f31/${label}.tap"
           }
 
+          count_not_ok() {
+            awk '/^[[:space:]]*not ok /{n++} END{print n+0}' "$1"
+          }
+
           assert_green() {
             local file="$1"
             test "$(grep -Ec '^[[:space:]]*ok [0-9]+ - ' "$file")" -eq 8
-            test "$(grep -Ec '^[[:space:]]*not ok ' "$file" || true)" -eq 0
+            test "$(count_not_ok "$file")" -eq 0
           }
 
           assert_red() {
             local file="$1"
-            test "$(grep -Ec '^[[:space:]]*not ok ' "$file")" -ge 1
+            test "$(count_not_ok "$file")" -ge 1
           }
 
           run_case() {
@@ -51,9 +55,7 @@ jobs:
             run_probe "${label}-baseline"
             assert_green "/tmp/f31/${label}-baseline.tap"
             psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -c "$mutation"
-            set +e
             run_probe "${label}-mutated"
-            set -e
             assert_red "/tmp/f31/${label}-mutated.tap"
             supabase db reset --local --no-seed
             run_probe "${label}-restored"
