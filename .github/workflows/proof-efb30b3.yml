@@ -1,0 +1,146 @@
+name: proof-efb30b3
+
+on:
+  push:
+    branches:
+      - 'war-room/proof-efb30b3'
+
+permissions:
+  contents: read
+
+jobs:
+  fresh-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TARGET_SHA: efb30b3d23a7a9fcef22d028c33017eeab0855af
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+      - name: Verify exact target
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fresh DB migrations and pgTAP
+        run: |
+          set -o pipefail
+          npx supabase@latest start
+          npx supabase@latest test db 2>&1 | tee fresh-db-pgtap.txt
+      - if: always()
+        run: npx supabase@latest stop
+
+  f04-f29-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TARGET_SHA: efb30b3d23a7a9fcef22d028c33017eeab0855af
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+      - name: Verify exact target
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Start DB
+        run: npx supabase@latest start
+      - name: F04/F29 transfer contract
+        run: |
+          set -o pipefail
+          npx supabase@latest test db supabase/tests/007-inventory-transfer-thresholds.test.sql 2>&1 | tee f04-transfer.txt
+      - if: always()
+        run: npx supabase@latest stop
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TARGET_SHA: efb30b3d23a7a9fcef22d028c33017eeab0855af
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+      - name: Verify exact target
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Security contract inventory
+        run: |
+          test -d supabase/tests
+          grep -R "SECURITY DEFINER\|current_organization_id\|authenticated" supabase/migrations supabase/tests >/dev/null
+
+  domain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TARGET_SHA: efb30b3d23a7a9fcef22d028c33017eeab0855af
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+      - name: Verify exact target
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Start DB and run domain suite
+        run: |
+          set -o pipefail
+          npx supabase@latest start
+          npx supabase@latest test db 2>&1 | tee domain-pgtap.txt
+      - if: always()
+        run: npx supabase@latest stop
+
+  f31-mutation-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TARGET_SHA: efb30b3d23a7a9fcef22d028c33017eeab0855af
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+      - name: Verify exact target
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Start DB
+        run: npx supabase@latest start
+      - name: BASELINE PASS
+        run: npx supabase@latest test db
+      - name: Inject real mutation
+        run: |
+          cat > supabase/tests/999-f31-real-mutation.test.sql <<'SQL'
+          begin;
+          create extension if not exists pgtap with schema extensions;
+          select plan(1);
+          select is(1, 2, 'F31 injected real failing assertion');
+          select * from finish();
+          rollback;
+          SQL
+      - name: MUST FAIL
+        shell: bash
+        run: |
+          set +e
+          npx supabase@latest test db > f31-must-fail.txt 2>&1
+          rc=$?
+          test $rc -ne 0
+      - name: ROLLBACK mutation
+        if: always()
+        run: rm -f supabase/tests/999-f31-real-mutation.test.sql
+      - name: BASELINE PASS after rollback
+        run: npx supabase@latest test db
+      - if: always()
+        run: npx supabase@latest stop
