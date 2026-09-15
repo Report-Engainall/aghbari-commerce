@@ -8,20 +8,27 @@ permissions:
 jobs:
   transfer:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Verify exact repair lineage
         run: |
           git rev-parse HEAD
           test -f supabase/migrations/20260915150000_fix_transfer_inventory_idempotency_lookup.sql
           test -f supabase/tests/040-transfer-inventory-adversarial.test.sql
-      - name: Validate SQL contracts
+      - name: Install Supabase CLI
+        run: npm install --global supabase@latest
+      - name: Start isolated local database
+        run: supabase start -x studio,imgproxy,mailpit,logflare,vector
+      - name: Apply migrations from clean database
+        run: supabase db reset --local --no-seed
+      - name: Run real pgTAP adversarial transfer suite
+        env:
+          PGPASSWORD: postgres
         run: |
-          grep -q "organization_id=v_org AND t.idempotency_key=v_key" supabase/migrations/20260915150000_fix_transfer_inventory_idempotency_lookup.sql
-          grep -q "40001" supabase/migrations/20260915150000_fix_transfer_inventory_idempotency_lookup.sql
-          grep -q "cross-tenant warehouse is rejected" supabase/tests/040-transfer-inventory-adversarial.test.sql
-          grep -q "same-key different quantity is rejected" supabase/tests/040-transfer-inventory-adversarial.test.sql
-      - name: Publish executable test contract
-        run: |
-          test "$(grep -c '^select ' supabase/tests/040-transfer-inventory-adversarial.test.sql)" -ge 10
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/040-transfer-inventory-adversarial.test.sql
+      - name: Stop isolated database
+        if: always()
+        run: supabase stop --no-backup
