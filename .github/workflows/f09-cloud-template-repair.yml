@@ -26,35 +26,80 @@ jobs:
           p = Path('src/App.tsx')
           s = p.read_text()
 
-          old = "import { getCustomerOrders, type CustomerOrderSummary } from './services/customerOrders';"
-          new = old + "\nimport { getOrderTemplates, createOrderTemplate, applyOrderTemplate, deleteOrderTemplate, type OrderTemplate } from './services/orderTemplates';"
-          if new not in s:
+          already_cloud_backed = (
+              'getOrderTemplates' in s and
+              'setTemplates(await getOrderTemplates());' in s and
+              'createOrderTemplate' in s and
+              'deleteOrderTemplate' in s and
+              'readLocalTemplates' not in s and
+              'writeLocalTemplates' not in s
+          )
+
+          if already_cloud_backed:
+              print('F09 application is already Cloud-backed; no application rewrite required.')
+          else:
+              old = "import { getCustomerOrders, type CustomerOrderSummary } from './services/customerOrders';"
+              new = old + "\nimport { getOrderTemplates, createOrderTemplate, applyOrderTemplate, deleteOrderTemplate, type OrderTemplate } from './services/orderTemplates';"
+              if new not in s:
+                  if old not in s:
+                      raise SystemExit('customerOrders import anchor not found')
+                  s = s.replace(old, new, 1)
+
+              s = s.replace("type TemplateLine = { productId: string; sku: string; name: string; unit: string; quantity: number };\ntype OrderTemplate = { id: string; name: string; branchLabel: string; lines: TemplateLine[]; updatedAt: string };\n", "", 1)
+              s = s.replace("function readLocalTemplates(customerId: string): OrderTemplate[] { try { return JSON.parse(localStorage.getItem(`aghbari:templates:${customerId}`) ?? '[]') as OrderTemplate[]; } catch { return []; } }\nfunction writeLocalTemplates(customerId: string, templates: OrderTemplate[]) { localStorage.setItem(`aghbari:templates:${customerId}`, JSON.stringify(templates)); }\n", "", 1)
+
+              old = "setCustomerName(customer.name); setCustomerTier(String(customer.tier ?? 'wholesale')); }\n      setTemplates(readLocalTemplates(profile.customer_id));"
+              new = "setCustomerName(customer.name); setCustomerTier(String(customer.tier ?? 'wholesale')); }\n      setTemplates(await getOrderTemplates());"
+              if old not in s:
+                  raise SystemExit('loadIdentity template replacement not found and app is not already repaired')
               s = s.replace(old, new, 1)
 
-          s = s.replace("type TemplateLine = { productId: string; sku: string; name: string; unit: string; quantity: number };\ntype OrderTemplate = { id: string; name: string; branchLabel: string; lines: TemplateLine[]; updatedAt: string };\n", "", 1)
-          s = s.replace("function readLocalTemplates(customerId: string): OrderTemplate[] { try { return JSON.parse(localStorage.getItem(`aghbari:templates:${customerId}`) ?? '[]') as OrderTemplate[]; } catch { return []; } }\nfunction writeLocalTemplates(customerId: string, templates: OrderTemplate[]) { localStorage.setItem(`aghbari:templates:${customerId}`, JSON.stringify(templates)); }\n", "", 1)
+              start = s.index('  async function saveTemplate() {')
+              end = s.index('  async function applyTemplate', start)
+              replacement = """  async function saveTemplate() {
+    if (!cart.length || !templateName.trim()) return;
+    try {
+      const created = await createOrderTemplate({
+        name: templateName.trim(),
+        branchLabel: 'الفرع الرئيسي',
+        lines: cart.map((line) => ({ productId: line.product.id, sku: line.product.sku, name: line.product.name, unit: line.product.unit, quantity: line.quantity })),
+      });
+      setTemplates((current) => [created, ...current.filter((item) => item.id !== created.id)].slice(0, 100));
+      setTemplateName('');
+      setRuntimeError(null);
+      setOrderResult('تم حفظ المسحة بنجاح.');
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : 'تعذر حفظ المسحة.');
+    }
+  }
+"""
+              s = s[:start] + replacement + s[end:]
 
-          old = "setCustomerName(customer.name); setCustomerTier(String(customer.tier ?? 'wholesale')); }\n      setTemplates(readLocalTemplates(profile.customer_id));"
-          new = "setCustomerName(customer.name); setCustomerTier(String(customer.tier ?? 'wholesale')); }\n      setTemplates(await getOrderTemplates());"
-          if old not in s:
-              raise SystemExit('loadIdentity template source replacement not found')
-          s = s.replace(old, new, 1)
+              start = s.index('  async function applyTemplate')
+              end = s.index('  function downloadStatement', start)
+              replacement = """  async function applyTemplate(template: OrderTemplate) {
+    try {
+      await applyOrderTemplate(template.id, warehouseId ?? undefined);
+      const savedCart = await getCart();
+      const byId = new Map(products.map((product) => [product.id, product]));
+      setCart(savedCart.map((item) => {
+        const product = byId.get(item.product_id);
+        return { product: product ?? { id: item.product_id, sku: item.sku, name: item.name, unit: item.unit, category: 'أصناف', availableQuantity: 0, status: 'active' }, quantity: item.quantity, unitPrice: item.authorized_price ?? 0 };
+      }));
+      setSection('catalog');
+      setRuntimeError(null);
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : 'تعذر تطبيق المسحة.');
+    }
+  }
+"""
+              s = s[:start] + replacement + s[end:]
 
-          start = s.index('  async function saveTemplate() {')
-          end = s.index('  async function applyTemplate', start)
-          replacement = """  async function saveTemplate() {\n    if (!cart.length || !templateName.trim()) return;\n    try {\n      const created = await createOrderTemplate({\n        name: templateName.trim(),\n        branchLabel: 'الفرع الرئيسي',\n        lines: cart.map((line) => ({ productId: line.product.id, sku: line.product.sku, name: line.product.name, unit: line.product.unit, quantity: line.quantity })),\n      });\n      setTemplates((current) => [created, ...current.filter((item) => item.id !== created.id)].slice(0, 100));\n      setTemplateName('');\n      setRuntimeError(null);\n      setOrderResult('تم حفظ المسحة بنجاح.');\n    } catch (error) {\n      setRuntimeError(error instanceof Error ? error.message : 'تعذر حفظ المسحة.');\n    }\n  }\n"""
-          s = s[:start] + replacement + s[end:]
-
-          start = s.index('  async function applyTemplate')
-          end = s.index('  function downloadStatement', start)
-          replacement = """  async function applyTemplate(template: OrderTemplate) {\n    try {\n      await applyOrderTemplate(template.id, warehouseId ?? undefined);\n      const savedCart = await getCart();\n      const byId = new Map(products.map((product) => [product.id, product]));\n      setCart(savedCart.map((item) => {\n        const product = byId.get(item.product_id);\n        return { product: product ?? { id: item.product_id, sku: item.sku, name: item.name, unit: item.unit, category: 'أصناف', availableQuantity: 0, status: 'active' }, quantity: item.quantity, unitPrice: item.authorized_price ?? 0 };\n      }));\n      setSection('catalog');\n      setRuntimeError(null);\n    } catch (error) {\n      setRuntimeError(error instanceof Error ? error.message : 'تعذر تطبيق المسحة.');\n    }\n  }\n"""
-          s = s[:start] + replacement + s[end:]
-
-          old = "<button className=\"ghost\" onClick={() => { const next = templates.filter((item) => item.id !== template.id); setTemplates(next); if (customerId) writeLocalTemplates(customerId, next); }}>حذف</button>"
-          new = "<button className=\"ghost\" onClick={() => void (async () => { try { await deleteOrderTemplate(template.id); setTemplates((current) => current.filter((item) => item.id !== template.id)); setRuntimeError(null); setOrderResult('تم حذف المسحة.'); } catch (error) { setRuntimeError(error instanceof Error ? error.message : 'تعذر حذف المسحة.'); } })()}>حذف</button>"
-          if old not in s:
-              raise SystemExit('delete template handler replacement not found')
-          s = s.replace(old, new, 1)
+              old = "<button className=\"ghost\" onClick={() => { const next = templates.filter((item) => item.id !== template.id); setTemplates(next); if (customerId) writeLocalTemplates(customerId, next); }}>حذف</button>"
+              new = "<button className=\"ghost\" onClick={() => void (async () => { try { await deleteOrderTemplate(template.id); setTemplates((current) => current.filter((item) => item.id !== template.id)); setRuntimeError(null); setOrderResult('تم حذف المسحة.'); } catch (error) { setRuntimeError(error instanceof Error ? error.message : 'تعذر حذف المسحة.'); } })()}>حذف</button>"
+              if old not in s:
+                  raise SystemExit('delete template handler replacement not found and app is not already repaired')
+              s = s.replace(old, new, 1)
 
           if 'readLocalTemplates' in s or 'writeLocalTemplates' in s or 'localStorage.getItem(`aghbari:templates:' in s or 'localStorage.setItem(`aghbari:templates:' in s:
               raise SystemExit('local template dependency remains')
@@ -75,5 +120,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/App.tsx .github/workflows/f09-cloud-template-repair.yml
-          git commit -m 'fix: make order templates cloud-backed in customer app'
+          git commit -m 'fix: make F09 template repair idempotent'
           git push origin HEAD:repair/clean-db-p0-war
