@@ -1,0 +1,60 @@
+name: recovery-current-sha-proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      exact_sha:
+        description: 'Exact Git commit SHA to verify'
+        required: true
+        type: string
+  push:
+    branches: ['**']
+
+permissions:
+  contents: read
+
+jobs:
+  exact-sha-fresh-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TARGET_SHA: ${{ inputs.exact_sha || github.sha }}
+    steps:
+      - name: Validate exact SHA input
+        shell: bash
+        run: |
+          echo "$TARGET_SHA" | grep -Eq '^[0-9a-f]{40}$' || { echo "INVALID SHA: $TARGET_SHA"; exit 1; }
+          git ls-remote "https://github.com/${{ github.repository }}.git" "$TARGET_SHA" | grep -q "$TARGET_SHA" || { echo "NONEXISTENT SHA: $TARGET_SHA"; exit 1; }
+      - name: Checkout exact target SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 1
+      - name: Verify exact target HEAD
+        shell: bash
+        run: |
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$TARGET_SHA" || { echo "EXACT HEAD MISMATCH: expected=$TARGET_SHA actual=$actual"; exit 1; }
+          echo "EXACT RECOVERY PROOF HEAD: $actual"
+      - name: Fail fast on duplicate migration versions
+        shell: bash
+        run: |
+          versions="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sed -E 's/^([0-9]+)_.*/\1/' | sort)"
+          duplicates="$(printf '%s\n' "$versions" | uniq -d)"
+          test -z "$duplicates" || { echo "Duplicate migration versions detected:"; printf '%s\n' "$duplicates"; exit 1; }
+          echo "Migration version uniqueness: PASS"
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Start local Supabase
+        run: supabase start
+      - name: Apply migrations from empty database
+        run: supabase db reset --local
+      - name: Run database pgTAP proofs
+        run: supabase test db --local
+      - name: Verify local migration inventory
+        if: always()
+        run: supabase migration list --local
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
