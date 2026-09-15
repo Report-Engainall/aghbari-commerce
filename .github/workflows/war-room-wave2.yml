@@ -1,0 +1,59 @@
+name: war-room-wave2
+
+on:
+  push:
+    branches:
+      - 'war-room/**'
+  workflow_dispatch:
+    inputs:
+      exact_sha:
+        required: true
+        type: string
+        description: Exact commit SHA to execute
+
+jobs:
+  db-contract-wave2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact target SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.exact_sha || github.sha }}
+          fetch-depth: 0
+      - name: Verify exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ inputs.exact_sha || github.sha }}'
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$expected"
+          echo "EXACT_SHA=$actual"
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Start local Supabase
+        run: npx supabase@latest start
+      - name: Run database contract suite
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p war-room-results
+          npx supabase@latest test db 2>&1 | tee war-room-results/pg-tap.txt
+      - name: Run static contract inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f supabase/tests/007-inventory-transfer-thresholds.test.sql
+          echo 'Inventory transfer contract present.' | tee war-room-results/inventory.txt
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: war-room-wave2-results
+          path: war-room-results/
+          if-no-files-found: warn
+      - name: Stop local Supabase
+        if: always()
+        run: npx supabase@latest stop
