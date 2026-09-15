@@ -18,5 +18,11 @@ select throws_ok(
   '22003','expense exceeds available cash balance','Expense cannot overdraw the operational cash account'
 );
 
+select is(
+  (select count(*) from public.outbox_events where event_type='expense.posted'),
+  1::bigint,
+  'Posted expense emits one durable outbox event'
+);
+
 select * from finish();
 rollback;
