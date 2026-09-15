@@ -24,7 +24,8 @@ jobs:
         shell: bash
         run: |
           echo "$TARGET_SHA" | grep -Eq '^[0-9a-f]{40}$' || { echo "INVALID SHA: $TARGET_SHA"; exit 1; }
-          git ls-remote "https://github.com/${{ github.repository }}.git" "$TARGET_SHA" | grep -q "$TARGET_SHA" || { echo "NONEXISTENT SHA: $TARGET_SHA"; exit 1; }
+          status="$(curl -sS -o /dev/null -w '%{http_code}' "https://api.github.com/repos/${{ github.repository }}/commits/$TARGET_SHA")"
+          test "$status" = "200" || { echo "NONEXISTENT SHA: $TARGET_SHA (GitHub API HTTP $status)"; exit 1; }
       - name: Checkout exact target SHA
         uses: actions/checkout@v4
         with:
