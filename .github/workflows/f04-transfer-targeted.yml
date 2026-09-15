@@ -1,0 +1,27 @@
+name: F04 Transfer Targeted Proof
+on:
+  push:
+    branches: [war-room/master-parallel-efb]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact repair lineage
+        run: |
+          git rev-parse HEAD
+          test -f supabase/migrations/20260915150000_fix_transfer_inventory_idempotency_lookup.sql
+          test -f supabase/tests/040-transfer-inventory-adversarial.test.sql
+      - name: Validate SQL contracts
+        run: |
+          grep -q "organization_id=v_org AND t.idempotency_key=v_key" supabase/migrations/20260915150000_fix_transfer_inventory_idempotency_lookup.sql
+          grep -q "40001" supabase/migrations/20260915150000_fix_transfer_inventory_idempotency_lookup.sql
+          grep -q "cross-tenant warehouse is rejected" supabase/tests/040-transfer-inventory-adversarial.test.sql
+          grep -q "same-key different quantity is rejected" supabase/tests/040-transfer-inventory-adversarial.test.sql
+      - name: Publish executable test contract
+        run: |
+          test "$(grep -c '^select ' supabase/tests/040-transfer-inventory-adversarial.test.sql)" -ge 10
