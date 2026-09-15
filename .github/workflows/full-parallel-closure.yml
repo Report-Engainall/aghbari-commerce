@@ -1,0 +1,186 @@
+name: FULL Parallel Closure
+on:
+  push:
+    branches: [war-room/master-parallel-efb]
+  workflow_dispatch:
+permissions:
+  contents: read
+
+concurrency:
+  group: full-parallel-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  domain:
+    name: DOMAIN / F01 F05 F06 F08 F17 F18 F19 F21 F22 F23
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TARGET_SHA: ${{ github.sha }}
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 1}
+      - name: Exact SHA
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: supabase/setup-cli@v1
+        with: {version: 2.117.0}
+      - name: Fresh database
+        run: supabase start && supabase db reset --local --no-seed
+      - name: Domain suites
+        env: {PGPASSWORD: postgres}
+        run: |
+          set -o pipefail
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/003-purchasing-receiving.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/005-purchase-idempotency-full-payload.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/008-finance-invoices-cash-expenses.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/009-cash-account-expense.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/011-catalog-warehouse-boundary.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/011-catalog-warehouse-truth.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/014-cart-order-tenant-boundary.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/020-order-state-machine-boundary.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/040-transfer-inventory-adversarial.test.sql
+      - if: always()
+        run: supabase stop --no-backup
+
+  security:
+    name: SECURITY / F02 F03 F10 F11 F13 F14 F27
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TARGET_SHA: ${{ github.sha }}
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 1}
+      - run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: supabase/setup-cli@v1
+        with: {version: 2.117.0}
+      - run: supabase start && supabase db reset --local --no-seed
+      - name: Security adversarial suites
+        env: {PGPASSWORD: postgres}
+        run: |
+          set -o pipefail
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/012-rpc-negative-security.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/013-security-regression-contract.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/013-tenant-mutation-boundary.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/018-rpc-privilege-surface.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/019-security-definer-contract.test.sql
+      - if: always()
+        run: supabase stop --no-backup
+
+  reliability:
+    name: RELIABILITY / F12 F25 F29 F30
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TARGET_SHA: ${{ github.sha }}
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 1}
+      - run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: supabase/setup-cli@v1
+        with: {version: 2.117.0}
+      - run: supabase start && supabase db reset --local --no-seed
+      - name: Reliability suites
+        env: {PGPASSWORD: postgres}
+        run: |
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/002-outbox-worker.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/005-purchase-idempotency-full-payload.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/012-stock-count-concurrency.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/031-f04-f29-adversarial-transfer.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/040-transfer-inventory-adversarial.test.sql
+      - if: always()
+        run: supabase stop --no-backup
+
+  imports:
+    name: IMPORT / F07 F08
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TARGET_SHA: ${{ github.sha }}
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 1}
+      - run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: supabase/setup-cli@v1
+        with: {version: 2.117.0}
+      - run: supabase start && supabase db reset --local --no-seed
+      - name: Import suites
+        env: {PGPASSWORD: postgres}
+        run: |
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/010-import-malformed-numeric.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/015-import-inventory-delta.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/016-import-tenant-boundary.test.sql
+          psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/017-import-inventory-delta.test.sql
+      - if: always()
+        run: supabase stop --no-backup
+
+  storage:
+    name: STORAGE / F26
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TARGET_SHA: ${{ github.sha }}
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 1}
+      - run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+      - uses: supabase/setup-cli@v1
+        with: {version: 2.117.0}
+      - run: supabase start && supabase db reset --local --no-seed
+      - name: Storage 15 assertion contract
+        env: {PGPASSWORD: postgres}
+        run: psql "postgresql://postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f supabase/tests/001-storage-boundary.test.sql
+      - if: always()
+        run: supabase stop --no-backup
+
+  test_the_test:
+    name: TEST-THE-TEST / F31
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 1}
+      - name: Exact SHA
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+      - name: Require real mutation harness
+        run: |
+          test -f .github/workflows/f31-mutation-proof.yml
+          test -f war-room/f31/f31-mutation-probe.test.sql
+
+  quality:
+    name: QUALITY / F32
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test:release-audit
+
+  browser:
+    name: BROWSER / F09 F15 F16 F20 F24
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
+      E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 1}
+      - run: test -n "$E2E_BASE_URL" && test -n "$E2E_EMAIL" && test -n "$E2E_PASSWORD"
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
