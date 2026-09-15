@@ -1,6 +1,40 @@
 -- Storage product-media RLS must use the storage-specific JWT context helpers.
 -- The generic application helpers are not the authoritative context inside
 -- storage.objects policy evaluation under the pgTAP/authenticated harness.
+--
+-- This migration runs before the later storage context hardening migrations,
+-- so the helpers required by these policies must exist before CREATE POLICY.
+
+CREATE OR REPLACE FUNCTION public.storage_current_organization_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+SET row_security = off
+AS $$
+  SELECT p.organization_id
+  FROM public.profiles AS p
+  WHERE p.id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+$$;
+
+CREATE OR REPLACE FUNCTION public.storage_is_staff()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+SET row_security = off
+AS $$
+  SELECT COALESCE(p.role IN ('owner','admin','sales','warehouse'), false)
+  FROM public.profiles AS p
+  WHERE p.id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.storage_current_organization_id() FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.storage_is_staff() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.storage_current_organization_id() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.storage_is_staff() TO authenticated;
 
 DROP POLICY IF EXISTS product_media_insert ON storage.objects;
 DROP POLICY IF EXISTS product_media_select ON storage.objects;
