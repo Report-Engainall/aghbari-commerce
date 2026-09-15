@@ -50,16 +50,16 @@ CREATE POLICY product_media_select ON storage.objects
 FOR SELECT TO authenticated
 USING (
   bucket_id = 'product-media'
-  AND array_length(string_to_array(name, '/'), 1) = 3
-  AND split_part(name, '/', 1) = public.storage_current_organization_id()::text
-  AND split_part(name, '/', 2) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  AND array_length(string_to_array(storage.objects.name, '/'), 1) = 3
+  AND split_part(storage.objects.name, '/', 1) = public.storage_current_organization_id()::text
+  AND split_part(storage.objects.name, '/', 2) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
   AND EXISTS (
     SELECT 1 FROM public.products AS p
-    WHERE p.id::text = split_part(name, '/', 2)
+    WHERE p.id::text = split_part(storage.objects.name, '/', 2)
       AND p.organization_id = public.storage_current_organization_id()
       AND p.status = 'active'
   )
-  AND split_part(name, '/', 3) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}[.]webp$'
+  AND split_part(storage.objects.name, '/', 3) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}[.]webp$'
 );
 
 CREATE POLICY product_media_insert ON storage.objects
@@ -68,15 +68,15 @@ WITH CHECK (
   bucket_id = 'product-media'
   AND public.storage_is_staff()
   AND owner_id = public.storage_current_user_id()::text
-  AND array_length(string_to_array(name, '/'), 1) = 3
-  AND split_part(name, '/', 1) = public.storage_current_organization_id()::text
-  AND split_part(name, '/', 2) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  AND array_length(string_to_array(storage.objects.name, '/'), 1) = 3
+  AND split_part(storage.objects.name, '/', 1) = public.storage_current_organization_id()::text
+  AND split_part(storage.objects.name, '/', 2) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
   AND EXISTS (
     SELECT 1 FROM public.products AS p
-    WHERE p.id::text = split_part(name, '/', 2)
+    WHERE p.id::text = split_part(storage.objects.name, '/', 2)
       AND p.organization_id = public.storage_current_organization_id()
   )
-  AND split_part(name, '/', 3) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}[.]webp$'
+  AND split_part(storage.objects.name, '/', 3) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}[.]webp$'
 );
 
 CREATE POLICY product_media_delete ON storage.objects
@@ -85,15 +85,15 @@ USING (
   bucket_id = 'product-media'
   AND public.storage_is_staff()
   AND owner_id = public.storage_current_user_id()::text
-  AND array_length(string_to_array(name, '/'), 1) = 3
-  AND split_part(name, '/', 1) = public.storage_current_organization_id()::text
-  AND split_part(name, '/', 2) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  AND array_length(string_to_array(storage.objects.name, '/'), 1) = 3
+  AND split_part(storage.objects.name, '/', 1) = public.storage_current_organization_id()::text
+  AND split_part(storage.objects.name, '/', 2) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
   AND EXISTS (
     SELECT 1 FROM public.products AS p
-    WHERE p.id::text = split_part(name, '/', 2)
+    WHERE p.id::text = split_part(storage.objects.name, '/', 2)
       AND p.organization_id = public.storage_current_organization_id()
   )
-  AND split_part(name, '/', 3) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}[.]webp$'
+  AND split_part(storage.objects.name, '/', 3) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}[.]webp$'
 );
 
 REVOKE EXECUTE ON FUNCTION public.storage_current_user_id() FROM PUBLIC, anon;
