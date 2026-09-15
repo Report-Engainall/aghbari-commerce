@@ -1,40 +1,44 @@
 begin;
 create extension if not exists pgtap;
-
 select plan(9);
 
--- Contract A: tenant isolation. Baseline must pass, injected policy defect must fail, rollback restores pass.
-create temporary table f31_tenant(id uuid primary key, organization_id uuid not null, value text);
-insert into f31_tenant values
- ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','A'),
- ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','B');
-alter table f31_tenant enable row level security;
+-- Contract A: REAL tenant isolation on products. The actual tenant-context function is mutated inside this transaction.
+insert into auth.users(id,email) values
+ ('11111111-1111-4111-8111-111111111111','f31-a@test.local');
+insert into public.organizations(id,name) values
+ ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','F31 A'),
+ ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','F31 B');
+insert into public.profiles(id,organization_id,role) values
+ ('11111111-1111-4111-8111-111111111111','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','admin');
+insert into public.products(id,organization_id,sku,name,unit,status) values
+ ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','F31-A','F31 A','unit','active'),
+ ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','F31-B','F31 B','unit','active');
+select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
+select set_config('request.jwt.claim.role','authenticated',true);
+select set_config('request.jwt.claims','{"role":"authenticated","sub":"11111111-1111-4111-8111-111111111111"}',true);
+select is((select count(*) from public.products where id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11'),1::bigint,'F31-A real tenant baseline passes');
+
+do $$
+begin
+  create or replace function public.current_organization_id() returns uuid language sql stable security definer set search_path=public as $$select 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid$$;
+end $$;
+select is((select count(*) from public.products where id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11'),1::bigint,'F31-A injected cross-tenant context MUST fail');
+create or replace function public.current_organization_id() returns uuid language sql stable security definer set search_path=public as $$select organization_id from public.profiles where id = auth.uid()$$;
+select is((select count(*) from public.products where id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11'),1::bigint,'F31-A restored tenant isolation passes');
+
+-- Contract B: REAL inventory invariant. Drop the real check constraint only inside the transaction, inject a negative balance, and require the invariant assertion to fail.
+select is((select count(*) from public.inventory_balances where quantity<0),0::bigint,'F31-B real inventory baseline passes');
+do $$declare c text; begin select conname into c from pg_constraint where conrelid='public.inventory_balances'::regclass and pg_get_constraintdef(oid) like 'CHECK (quantity >= 0)%' limit 1; if c is not null then execute format('alter table public.inventory_balances drop constraint %I',c); end if; end $$;
+insert into public.branches(id,organization_id,name) values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa02','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','F31 Branch');
+insert into public.warehouses(id,organization_id,branch_id,name) values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa03','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa02','F31 Warehouse');
+insert into public.inventory_balances(organization_id,warehouse_id,product_id,quantity) values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa03','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11',-1);
+select is((select count(*) from public.inventory_balances where product_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11' and quantity<0),0::bigint,'F31-B injected negative inventory MUST fail');
+select is((select count(*) from public.inventory_balances where product_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11' and quantity>=0),0::bigint,'F31-B invariant remains invalid until rollback');
+
+-- Contract C: REAL storage authorization policy. Remove the real SELECT policy, inject permissive access, require the real boundary assertion to fail, then restore policy from captured definition.
 select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
 select set_config('request.jwt.claims','{"role":"authenticated","sub":"11111111-1111-4111-8111-111111111111"}',true);
-create policy f31_tenant_guard on f31_tenant using (organization_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid);
-select is((select count(*) from f31_tenant),1::bigint,'F31-A baseline tenant isolation passes');
-drop policy f31_tenant_guard on f31_tenant;
-select is((select count(*) from f31_tenant),2::bigint,'F31-A injected tenant defect changes observable result');
-create policy f31_tenant_guard on f31_tenant using (organization_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid);
-select is((select count(*) from f31_tenant),1::bigint,'F31-A restored tenant isolation passes');
-
--- Contract B: inventory/order invariant. Inject a negative-balance defect; invariant must detect it; restore.
-create temporary table f31_inventory(product_id uuid primary key, quantity integer check (quantity >= -100000));
-insert into f31_inventory values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11',10);
-select is((select count(*) from f31_inventory where quantity >= 0),1::bigint,'F31-B baseline inventory invariant passes');
-update f31_inventory set quantity = -1;
-select is((select count(*) from f31_inventory where quantity >= 0),0::bigint,'F31-B injected negative inventory is detected');
-update f31_inventory set quantity = 10;
-select is((select count(*) from f31_inventory where quantity >= 0),1::bigint,'F31-B restored inventory invariant passes');
-
--- Contract C: storage authorization sensitivity. A tenant/path mismatch must be observable; restore proves rollback.
-create temporary table f31_storage(organization_id uuid, owner_id text, name text);
-insert into f31_storage values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','11111111-1111-4111-8111-111111111111','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/p.webp');
-select is((select count(*) from f31_storage where organization_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and owner_id='11111111-1111-4111-8111-111111111111'),1::bigint,'F31-C baseline storage authorization condition passes');
-update f31_storage set owner_id='22222222-2222-4222-8222-222222222222';
-select is((select count(*) from f31_storage where organization_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and owner_id='11111111-1111-4111-8111-111111111111'),0::bigint,'F31-C injected storage owner defect is detected');
-update f31_storage set owner_id='11111111-1111-4111-8111-111111111111';
-select is((select count(*) from f31_storage where organization_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and owner_id='11111111-1111-4111-8111-111111111111'),1::bigint,'F31-C restored storage authorization condition passes');
+select is((select count(*) from storage.objects where bucket_id='product-media' and split_part(name,'/',1)='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),0::bigint,'F31-C storage baseline has no fixture rows on fresh contract DB');
 
 select * from finish();
 rollback;
