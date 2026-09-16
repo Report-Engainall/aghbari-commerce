@@ -5,6 +5,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const CUSTOMER_TIERS = new Set<CustomerTier>(['retail', 'wholesale', 'distributor']);
 const PRODUCT_STATUSES = new Set(['active', 'inactive']);
 
+export interface StaffProductRecord { id: string; sku: string; name: string; unit: string; category_id: string | null; description: string | null; status: 'active' | 'inactive'; }
+
 function assertUuid(value: string, operation: string) {
   const normalized = value.trim();
   if (!UUID_PATTERN.test(normalized)) throw new Error(`معرّف ${operation} غير صالح.`);
@@ -61,6 +63,21 @@ export function assertInventoryQuantity(value: unknown): number {
     throw new Error('استجابة تعديل المخزون غير صالحة. لم يتم إثبات نجاح العملية.');
   }
   return value;
+}
+
+export async function getStaffProducts(limit = 500): Promise<StaffProductRecord[]> {
+  const safeLimit = Number.isSafeInteger(limit) ? Math.min(Math.max(limit, 1), 1000) : 500;
+  const { data, error } = await requireSupabase().from('products').select('id,sku,name,unit,category_id,description,status').order('name').limit(safeLimit);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: assertUuid(row.id, 'المنتج'),
+    sku: assertNonBlank(row.sku, 'SKU المنتج'),
+    name: assertNonBlank(row.name, 'اسم المنتج'),
+    unit: assertNonBlank(row.unit, 'وحدة المنتج'),
+    category_id: row.category_id ? assertUuid(row.category_id, 'تصنيف المنتج') : null,
+    description: row.description == null ? null : String(row.description),
+    status: assertProductStatus(row.status)
+  }));
 }
 
 export async function createCategory(name: string, slug: string, parentId: string | null = null) {

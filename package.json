@@ -15,7 +15,8 @@
     "test:release-audit": "node scripts/release-audit.mjs",
     "test:product-integrity": "node scripts/product-integrity-audit.mjs",
     "test:architecture": "node scripts/architecture-audit.mjs",
-    "test:release-gate": "npm run test:product-integrity && npm run test:architecture && npm run typecheck && npm run lint && npm test -- --run && npm run build && npm run test:release-audit",
+    "test:order-invariants": "node scripts/check-order-invariants.mjs",
+    "test:release-gate": "npm run test:product-integrity && npm run test:architecture && npm run test:order-invariants && npm run typecheck && npm run lint && npm test -- --run && npm run build && npm run test:release-audit",
     "preview": "vite preview"
   },
   "dependencies": {
