@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { transitionOrder } from './services/staffOrders';
 
-const requireSupabaseMock = vi.fn();
+const { requireSupabaseMock } = vi.hoisted(() => ({ requireSupabaseMock: vi.fn() }));
 
 vi.mock('./lib/supabase', () => ({ requireSupabase: requireSupabaseMock }));
 

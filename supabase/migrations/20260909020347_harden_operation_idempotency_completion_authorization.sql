@@ -1,0 +1,4 @@
+-- Compatibility migration for the Supabase migration lineage.
+-- The live staging project already recorded this migration; the current canonical
+-- schema carries its effective safeguards in later migrations. Keep this file so
+-- clean replay and repository lineage remain deterministic without mutating history.

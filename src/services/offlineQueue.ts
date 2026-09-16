@@ -41,8 +41,11 @@ export function enqueueOfflineOperation<T>(userId: string, type: string, payload
   const normalizedType = type.trim();
   if (!normalizedType) throw new Error('نوع العملية مطلوب.');
   if (!OFFLINE_SAFE_OPERATION_TYPES.has(normalizedType)) throw new Error('هذه العملية لا يُسمح بتأجيلها دون اتصال.');
+  // Serialize and size-check before schema validation so callers get the precise
+  // failure class for cyclic or oversized payloads.
+  const bytes = payloadBytes(payload);
+  if (bytes > MAX_OFFLINE_PAYLOAD_BYTES) throw new Error(`حجم بيانات العملية يتجاوز ${MAX_OFFLINE_PAYLOAD_BYTES} بايت.`);
   if (!validPayload(normalizedType, payload)) throw new Error('بيانات عملية السلة غير صالحة.');
-  if (payloadBytes(payload) > MAX_OFFLINE_PAYLOAD_BYTES) throw new Error(`حجم بيانات العملية يتجاوز ${MAX_OFFLINE_PAYLOAD_BYTES} بايت.`);
   const operation: OfflineOperation<T> = { operationId: crypto.randomUUID(), userId: userId.trim(), type: normalizedType, payload, createdAt: new Date().toISOString(), attempts: 0 };
   persist([...read<unknown>(), operation as OfflineOperation<unknown>]);
   return operation;
