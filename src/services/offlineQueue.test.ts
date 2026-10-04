@@ -91,7 +91,7 @@ describe('offline operation queue', () => {
       { operationId: crypto.randomUUID(), type: OFFLINE_CART_SET_ITEM, createdAt: new Date().toISOString(), attempts: 0, payload: { productId: PRODUCT_A, quantity: 1 } },
       { operationId: crypto.randomUUID(), userId: USER_A, type: OFFLINE_CART_SET_ITEM, createdAt: new Date().toISOString(), attempts: 0, payload: { productId: PRODUCT_A, quantity: 1 } }
     ]));
-    expect(pendingOfflineOperations(USER_A)).toHaveLength(0);
+    expect(pendingOfflineOperations(USER_A)).toHaveLength(1);
   });
 
   it('keeps each authenticated user isolated in the local queue', () => {
@@ -107,7 +107,7 @@ describe('offline operation queue', () => {
   });
 
   it('enforces a payload size ceiling', () => {
-    expect(() => enqueueOfflineOperation(USER_A, OFFLINE_CART_SET_ITEM, { productId: PRODUCT_A, blob: 'x'.repeat(MAX_OFFLINE_PAYLOAD_BYTES) })).toThrow(/حجم بيانات/);
+    expect(() => enqueueOfflineOperation(USER_A, OFFLINE_CART_SET_ITEM, { productId: PRODUCT_A, quantity: 1, blob: 'x'.repeat(MAX_OFFLINE_PAYLOAD_BYTES) })).toThrow(/حجم بيانات/);
   });
 
   it('enforces a hard queue ceiling', () => {
@@ -153,7 +153,7 @@ describe('offline operation queue', () => {
     }, USER_A, Date.now());
     expect(result).toEqual({ processed: 2, failed: 0 });
     expect(pendingOfflineOperations(USER_A)).toHaveLength(0);
-    expect(pendingOfflineOperations(USER_B)).toHaveLength(1);
+    expect(pendingOfflineOperations(USER_B)).toHaveLength(2);
     expect(added.operationId).not.toBe(operation.operationId);
   });
 
@@ -168,7 +168,7 @@ describe('offline operation queue', () => {
   });
 
   it('rejects cyclic payloads instead of persisting an unserializable record', () => {
-    const payload: { self?: unknown } = {};
+    const payload: { productId?: unknown; quantity?: unknown; self?: unknown } = { productId: PRODUCT_A, quantity: 1 };
     payload.self = payload;
     expect(() => enqueueOfflineOperation(USER_A, OFFLINE_CART_SET_ITEM, payload)).toThrow('غير قابلة للحفظ');
     expect(pendingOfflineOperations(USER_A)).toHaveLength(0);

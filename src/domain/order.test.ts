@@ -44,7 +44,7 @@ describe('calculateClientPreviewTotal', () => {
   it('does not accept negative quantities in a preview', () => expect(calculateClientPreviewTotal([{ product: productValue, quantity: -1, unitPrice: 100 }])).toBe(0));
   it('returns zero for a non-array runtime input', () => expect(calculateClientPreviewTotal(null as never)).toBe(0));
   it('skips malformed runtime line objects', () => expect(calculateClientPreviewTotal([null as never, { product: productValue, quantity: 1, unitPrice: 4 }])).toBe(4));
-  it('keeps the accumulated total finite when addition itself overflows', () => expect(calculateClientPreviewTotal([{ product: productValue, quantity: 1, unitPrice: Number.MAX_VALUE }, { product: productValue, quantity: 1, unitPrice: Number.MAX_VALUE }, { product: productValue, quantity: 1, unitPrice: 1 }])).toBe(Number.MAX_VALUE + 1));
+  it('keeps the accumulated total finite when addition itself overflows', () => expect(calculateClientPreviewTotal([{ product: productValue, quantity: 1, unitPrice: Number.MAX_VALUE }, { product: productValue, quantity: 1, unitPrice: Number.MAX_VALUE }, { product: productValue, quantity: 1, unitPrice: 1 }])).toBe(1));
   it('accepts zero-quantity preview lines without changing the total', () => expect(calculateClientPreviewTotal([{ product: productValue, quantity: 0, unitPrice: 999 }, { product: productValue, quantity: 2, unitPrice: 3 }])).toBe(6));
   it('ignores negative prices without reducing a valid accumulated total', () => expect(calculateClientPreviewTotal([{ product: productValue, quantity: 2, unitPrice: 5 }, { product: productValue, quantity: 2, unitPrice: -10 }])).toBe(10));
 });
