@@ -76,7 +76,7 @@ const ignoredNames = new Set(['node_modules', 'dist', '.git']);
 const suspiciousPatterns = [
   /\bTODO\b/i,
   /\bFIXME\b/i,
-  /\bplaceholder\b(?!\s*[=}])/i,
+  /(?<!::)\bplaceholder\b(?!\s*[=}])/i,
   /\bnot\s+implemented\b/i,
   /\bnotimplemented\b/i,
   /\b(?:mock|fake|sample)\s+(?:data|api|response|success)\b/i,
