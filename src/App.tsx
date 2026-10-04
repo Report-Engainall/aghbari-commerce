@@ -7,7 +7,7 @@ import { getCategories, type CategoryOption } from './services/categories';
 import { getCart, removeCartItem, setCartItem, syncOfflineCart } from './services/cart';
 import { createOrder } from './services/orders';
 import { getCustomerOrders, type CustomerOrderSummary } from './services/customerOrders';
-import { getSession, signIn, signOut } from './services/auth';
+import { getSession, signIn, signOut, signUp } from './services/auth';
 import { supabase } from './lib/supabase';
 import AdminPanel from './AdminPanel';
 import './styles.css';
@@ -24,6 +24,9 @@ function mapCatalogItem(item: CatalogItem, categoryName: string, imageUrl?: stri
 
 export default function App() {
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [signupConfirm, setSignupConfirm] = useState('');
+  const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [sessionReady, setSessionReady] = useState(false); const [signedIn, setSignedIn] = useState(false); const [role, setRole] = useState<UserRole>('viewer');
   const [authBusy, setAuthBusy] = useState(false); const [authError, setAuthError] = useState<string | null>(null);
   const [query, setQuery] = useState(''); const [catalogSearch, setCatalogSearch] = useState(''); const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -37,8 +40,9 @@ export default function App() {
   async function loadIdentity(userId: string) {
     const client = supabase;
     if (!client) throw new Error('Supabase غير مهيأ. تحقق من إعدادات البيئة قبل استخدام التطبيق.');
-    const { data: profile, error } = await client.from('profiles').select('customer_id, role').eq('id', userId).single();
+    const { data: profile, error } = await client.from('profiles').select('customer_id, role').eq('id', userId).maybeSingle();
     if (error) throw error;
+    if (!profile) { setCustomerId(null); setRole('viewer'); return; }
     setCustomerId(profile.customer_id); setRole((profile.role as UserRole) ?? 'viewer');
   }
 
@@ -149,9 +153,21 @@ export default function App() {
   const total = calculateClientPreviewTotal(cart);
 
   async function handleLogin(event: FormEvent) {
-    event.preventDefault(); setAuthBusy(true); setAuthError(null);
+    event.preventDefault(); setAuthBusy(true); setAuthError(null); setAuthSuccess(null);
     try { const session = await signIn(email.trim(), password); if (session) await loadIdentity(session.user.id); setPassword(''); }
     catch (error) { setAuthError(error instanceof Error ? error.message : 'تعذر تسجيل الدخول.'); }
+    finally { setAuthBusy(false); }
+  }
+
+  async function handleSignUp(event: FormEvent) {
+    event.preventDefault(); setAuthBusy(true); setAuthError(null); setAuthSuccess(null);
+    if (password.length < 8) { setAuthError('كلمة المرور يجب أن تكون 8 أحرف على الأقل.'); setAuthBusy(false); return; }
+    if (password !== signupConfirm) { setAuthError('تأكيد كلمة المرور غير مطابق.'); setAuthBusy(false); return; }
+    try {
+      const session = await signUp(email.trim(), password);
+      if (session) { setAuthSuccess('تم إنشاء الحساب بنجاح. جارٍ الدخول…'); await loadIdentity(session.user.id); }
+      else { setAuthSuccess('تم إنشاء الحساب. يمكنك الآن تسجيل الدخول.'); setAuthMode('signin'); setPassword(''); setSignupConfirm(''); }
+    } catch (error) { setAuthError(error instanceof Error ? error.message : 'تعذر إنشاء الحساب.'); }
     finally { setAuthBusy(false); }
   }
 
@@ -196,7 +212,12 @@ export default function App() {
   }
 
   if (!sessionReady) return <div className="auth-shell"><div className="auth-card"><span className="eyebrow">الأغبري</span><h1>جارٍ التحقق من الجلسة</h1><p>يتم التحقق من الهوية قبل عرض بيانات المتجر.</p></div></div>;
-  if (!signedIn) return <div className="auth-shell"><form className="auth-card" onSubmit={handleLogin}><span className="eyebrow">بوابة الأغبري التجارية</span><h1>تسجيل الدخول</h1><p>ادخل بحسابك للوصول إلى الكتالوج والأسعار المصرح بها.</p><label>البريد الإلكتروني<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><label>كلمة المرور<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" /></label>{authError && <div className="error-banner" role="alert">{authError}</div>}<button className="checkout" disabled={authBusy}>{authBusy ? 'جارٍ الدخول…' : 'دخول آمن'}</button></form></div>;
+  if (!signedIn) return <div className="auth-shell"><div className="auth-card auth-card-wide">
+    <div className="auth-brand-row"><span className="brand-mark brand-mark-lg">أ</span><div><strong>بوابة الأغبري</strong><small>للتجارة والجملة</small></div></div>
+    <div className="auth-tabs"><button type="button" className={`auth-tab ${authMode === 'signin' ? 'active' : ''}`} onClick={() => { setAuthMode('signin'); setAuthError(null); setAuthSuccess(null); }}>تسجيل الدخول</button><button type="button" className={`auth-tab ${authMode === 'signup' ? 'active' : ''}`} onClick={() => { setAuthMode('signup'); setAuthError(null); setAuthSuccess(null); }}>إنشاء حساب</button></div>
+    {authMode === 'signin' ? <form onSubmit={handleLogin}><p className="auth-subtitle">ادخل بحسابك للوصول إلى الكتالوج والأسعار المصرح بها.</p><label>البريد الإلكتروني<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><label>كلمة المرور<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" /></label>{authError && <div className="error-banner" role="alert">{authError}</div>}{authSuccess && <div className="success" role="status">{authSuccess}</div>}<button className="checkout" disabled={authBusy}>{authBusy ? 'جارٍ الدخول…' : 'دخول آمن'}</button></form> : <form onSubmit={handleSignUp}><p className="auth-subtitle">أنشئ حسابًا جديدًا للوصول إلى بوابة الجملة والأسعار المصرح بها.</p><label>البريد الإلكتروني<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><label>كلمة المرور<input type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="new-password" /></label><label>تأكيد كلمة المرور<input type="password" minLength={8} value={signupConfirm} onChange={(event) => setSignupConfirm(event.target.value)} required autoComplete="new-password" /></label>{authError && <div className="error-banner" role="alert">{authError}</div>}{authSuccess && <div className="success" role="status">{authSuccess}</div>}<button className="checkout" disabled={authBusy}>{authBusy ? 'جارٍ الإنشاء…' : 'إنشاء الحساب'}</button></form>}
+    <p className="auth-footnote">بالدخول فإنك توافق على شروط استخدام بوابة الأغبري التجارية وسياسة الخصوصية.</p>
+  </div></div>;
 
   return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">أ</span><div><strong>بوابة الأغبري</strong><small>للتجارة والجملة</small></div></div><nav aria-label="التنقل الرئيسي"><a className="active" href="#catalog">المنتجات</a>{STAFF_ROLES.has(role) && <a href="#account">مركز التحكم</a>}<a href="#orders">طلباتي</a></nav><div className="topbar-actions"><button className="cart-button" aria-label={`السلة، ${cart.length} أصناف`} onClick={() => document.getElementById('cart')?.scrollIntoView({ behavior: 'smooth' })}>السلة <b>{cart.length}</b></button><button className="signout" onClick={() => void handleSignOut()}>خروج</button></div></header>
     {!isOnline && <div className="offline-banner" role="status" aria-live="polite">أنت الآن دون اتصال. يمكنك تعديل السلة، وسيتم مزامنتها عند عودة الاتصال. <strong>إرسال الطلب يحتاج اتصالًا.</strong></div>}
