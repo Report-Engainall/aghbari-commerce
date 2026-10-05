@@ -9,14 +9,21 @@ export default function CustomerActivation({ token }: { token: string }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     void acceptCustomerInvitation(token).then(() => {
       if (!cancelled) { setMessage('تم تفعيل حساب العميل. جارٍ فتح بوابة الأغبري…'); window.history.replaceState({}, '', window.location.pathname); window.setTimeout(() => window.location.reload(), 250); }
     }).catch((e) => {
-      if (!cancelled && e instanceof Error && !['AUTH_REQUIRED', 'INVITATION_EMAIL_MISMATCH'].includes(e.message)) setError(e.message);
-    });
+      if (!cancelled) {
+        if (e instanceof Error && ['AUTH_REQUIRED', 'INVITATION_EMAIL_MISMATCH'].includes(e.message)) {
+          // Expected: user needs to sign up or sign in first — show the form
+        } else if (e instanceof Error) {
+          setError(e.message);
+        }
+      }
+    }).finally(() => { if (!cancelled) setChecking(false); });
     return () => { cancelled = true; };
   }, [token]);
 

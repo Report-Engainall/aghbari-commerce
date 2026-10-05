@@ -29,7 +29,8 @@ export default function ExportPanel({ role }: { role: UserRole }) {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  if (!canExport || !supabase) return null;
+  if (!canExport) return <div className="admin-card"><p className="access-denied">لا تملك صلاحية تصدير البيانات.</p></div>;
+  if (!supabase) return null;
   const client = supabase;
 
   async function fetchAllProducts() {
